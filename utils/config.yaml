@@ -1,0 +1,30 @@
+camera:
+    crop_area: [0.11414930555555558, 0.0017361111111111123, 0.880642361111111, 0.677662037037037]  # 0.25, 0.25, 0.75, 0.75
+    wh: [1280, 960]
+
+streamer:
+    enable: true
+    host: '127.0.0.1'
+    port: 9527
+    route: /meal
+    size: [640, 480]
+    quality: 40
+
+AI:
+    handwash:
+        path: 'best_0.9690_0.9930_epoch_47_handwash-1472_fp16.dla'
+        score_thresh: 0.5
+        iou_thresh: 0.4
+        input_wh: [448, 448]
+        agnostic_nms: false
+        classes:
+            - step_1
+            - step_2
+            - step_3
+            - step_4
+            - step_5
+            - step_6
+
+log:
+    folder: '/mnt/reserved/log'
+    level: INFO
