@@ -13,7 +13,7 @@ from .image import resize_keep_scale
 
 
 class Video:
-    def __init__(self, base_dir, frame_w, frame_h, fps, bitrate=3, suffix=''):
+    def __init__(self, base_dir, frame_w, frame_h, fps, periods, bitrate=3, suffix=''):
         self.base_dir = base_dir
         self.date = None
         self.hour = None
@@ -32,13 +32,6 @@ class Video:
         self.num_write = 0
         self.frame_q = queue.Queue(256)
         self.running = True
-        periods = [
-            (9, 12),
-            (12, 14),
-            (14, 17),
-            (17, 19),
-            (19, 21)
-        ]
         self.working_hours = self._make_working_hour(periods)
         self._init_writer()
 

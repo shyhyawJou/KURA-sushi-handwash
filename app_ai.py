@@ -27,7 +27,7 @@ class App_HandWash:
         self.camera = Camera(**CFG['camera'])
         self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.ai_model = RTMDet_DLA(**CFG['AI']['handwash'])
-        self.video = Video('/mnt/reserved/record/stream', 640, 480, 30, 3, '')
+        self.video = Video(**CFG['video'])
         
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)

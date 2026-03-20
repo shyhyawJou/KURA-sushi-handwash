@@ -1,5 +1,6 @@
 camera:
-    crop_area: [0.11414930555555558, 0.0017361111111111123, 0.880642361111111, 0.677662037037037]  # 0.25, 0.25, 0.75, 0.75
+    #crop_area: [0., 0., 1., 0.677662037037037]  # 0.25, 0.25, 0.75, 0.75
+    crop_area: [0., 0., 1., 0.7277]  # 0.25, 0.25, 0.75, 0.75
     wh: [1280, 960]
 
 streamer:
@@ -28,3 +29,15 @@ AI:
 log:
     folder: '/mnt/reserved/log'
     level: INFO
+
+video:
+    base_dir: /mnt/reserved/record/stream
+    frame_w: 640
+    frame_h: 480
+    fps: 30
+    periods: [
+        [11, 12],
+        [17, 18]
+    ]
+    bitrate: 3
+    suffix: ''
