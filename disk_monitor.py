@@ -38,7 +38,7 @@ def custom_cleanup_logic():
         folder = sorted([f for f in base_path.iterdir() if f.is_dir()])[0]
         
         try:
-            shutil.rmtree(folder[0])
+            shutil.rmtree(folder)
             logger.info(f"已刪除資料夾: {folder.name}")
             
             # 重新檢查空間
