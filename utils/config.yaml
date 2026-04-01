@@ -1,7 +1,9 @@
 camera:
     #crop_area: [0., 0., 1., 0.677662037037037]  # 0.25, 0.25, 0.75, 0.75
-    crop_area: [0., 0., 1., 0.7277]  # 0.25, 0.25, 0.75, 0.75
+    #crop_area: [0., 0., 1., 0.7277]  # 0.25, 0.25, 0.75, 0.75
+    crop_area: []
     wh: [1280, 960]
+    video_path: 'output.mp4'
 
 streamer:
     enable: true
@@ -13,25 +15,28 @@ streamer:
 
 AI:
     handwash:
-        path: 'best_0.9690_0.9930_epoch_47_handwash-1472_fp16.dla'
+        path: 'best_0.9470_0.9810_epoch_77_handwash-746_my.onnx'
         score_thresh: 0.5
         iou_thresh: 0.4
         input_wh: [448, 448]
         agnostic_nms: false
         classes:
-            - step_1
-            - step_2
-            - step_3
-            - step_4
-            - step_5
-            - step_6
+            - 'left'
+            - 'right'
+            - 'step_1'
+            - 'step_2'
+            - 'step_3'
+            - 'step_4'
+            - 'step_5'
+            - 'step_6'
+            - 'step_7'
 
 log:
-    folder: '/mnt/reserved/log'
+    folder: 'log'
     level: INFO
 
 video:
-    base_dir: /mnt/reserved/record/stream
+    base_dir: log/record/stream
     frame_w: 640
     frame_h: 480
     fps: 30

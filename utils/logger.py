@@ -12,11 +12,11 @@ def setup_logger(level="INFO", folder="logs", suffix=None):
     logger.remove() 
 
     # 2. 輸出到控制台 (保持即時 Debug 用)
-    logger.add(
-        sys.stderr, 
-        level='DEBUG', 
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
-    )
+    #logger.add(
+    #    sys.stderr, 
+    #    level='DEBUG', 
+    #    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    #)
 
     # 3. 輸出到檔案 (關鍵修改：檔名與輪替)
     # 使用 {time} 佔位符，Loguru 會在建立檔案時自動填入時間

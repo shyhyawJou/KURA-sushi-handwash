@@ -5,7 +5,7 @@ import traceback
 import socket
 from loguru import logger
 from utils import (Mjpeg_Streamer, 
-                   RTMDet_DLA, 
+                   RTMDet_ONNX, 
                    Camera,
                    Timer,
                    Video,
@@ -26,8 +26,8 @@ class App_HandWash:
 
         self.camera = Camera(**CFG['camera'])
         self.streamer = Mjpeg_Streamer(**CFG['streamer'])
-        self.ai_model = RTMDet_DLA(**CFG['AI']['handwash'])
-        self.video = Video(**CFG['video'])
+        self.ai_model = RTMDet_ONNX(**CFG['AI']['handwash'])
+        #self.video = Video(**CFG['video'])
         
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
@@ -44,7 +44,7 @@ class App_HandWash:
                 with Timer('one complete loop'):
                     ret, frame = self.camera.get_latest_frame()
                     if not ret:
-                        continue
+                        break
 
                     # AI Inference
                     #with Timer("AI detect"):
@@ -58,7 +58,7 @@ class App_HandWash:
                     
                     # Push to Streamer
                     self.streamer.push_frame(frame_copy) 
-                    self.video.write_frame(frame)
+                    #self.video.write_frame(frame)
 
         except SystemExit:
             pass
@@ -78,7 +78,7 @@ class App_HandWash:
         
         self.streamer.stop()
         self.camera.stop() # 統一透過物件釋放
-        self.video.stop()
+        #self.video.stop()
 
         logger.success("Program exited safely.")
         sys.exit(0)
