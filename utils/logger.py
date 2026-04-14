@@ -31,7 +31,7 @@ def setup_logger(level="INFO", folder="logs", suffix=None):
         retention="30 days", # 保留最近 30 天的日誌
         level=level,     # 檔案通常存 INFO 以上即可，避免 DEBUG 塞爆硬碟
         encoding="utf-8",    # 確保中文不亂碼
-        enqueue=True         # 啟動非同步寫入，避免 Log 影響 AI 推論效能
+        enqueue=False         # 啟動同步寫入
     )
 
     logger.success(f'log file path: {log_file_path}')
