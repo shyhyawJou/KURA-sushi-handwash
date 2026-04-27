@@ -13,12 +13,25 @@ except:
 
 
 class RTMDet:
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False):
+    def __init__(self, 
+                 path, 
+                 score_thresh, 
+                 iou_thresh, 
+                 input_wh, 
+                 classes, 
+                 agnostic_nms=False, 
+                 agnostic_nms_classes=None):
+        
         self.model = None
         self.input_wh = input_wh
         self.agnostic_nms = agnostic_nms
         self.score_thresh = score_thresh
         self.iou_thresh = iou_thresh
+        #assert agnostic_nms ^ (agnostic_nms_classes is None or len(agnostic_nms_classes) == 0)
+        if agnostic_nms_classes and len(agnostic_nms_classes) > 0:
+            self.agnostic_nms_labels = [i for i in range(len(classes)) if classes[i] in agnostic_nms_classes]
+        else:
+            self.agnostic_nms_labels = None
         self.strides = [8, 16, 32]
         self.mean = np.asarray([103.53, 116.28, 123.675], 'float32')
         self.std = np.asarray([57.375, 57.12, 58.395], 'float32')
@@ -69,11 +82,25 @@ class RTMDet:
         if self.agnostic_nms:
             ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
         else:
+            #OFFSET_WH = 4096
+            #offset = OFFSET_WH * pred_labels
+            #boxes_nms[:, 0] += offset
+            #ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
+
+            # 類別敏感 NMS (包含「部分類別合併」的需求)
             OFFSET_WH = 4096
-            offset = OFFSET_WH * pred_labels
+            adjusted_labels = pred_labels.copy()
+            
+            # 如果有指定哪些類別要「忽略標籤差異、共同競爭」
+            if self.agnostic_nms_labels:
+                target_cls = self.agnostic_nms_labels[0]
+                mask = np.isin(adjusted_labels, self.agnostic_nms_labels)
+                adjusted_labels[mask] = target_cls
+                
+            offset = (adjusted_labels * OFFSET_WH).astype('float32')
             boxes_nms[:, 0] += offset
             ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
-        
+
         if len(ids) > 0:
             scores, boxes, pred_labels = scores[ids], boxes[ids], pred_labels[ids]
             boxes[:, :4] /= scale
@@ -134,8 +161,8 @@ class RTMDet:
 
 
 class RTMDet_ONNX(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False, agnostic_nms_classes=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms, agnostic_nms_classes)
 
     def _forward(self, x):
         y = self.model.run(None, {self.input_name: x})[0]
@@ -148,8 +175,8 @@ class RTMDet_ONNX(RTMDet):
 
 
 class RTMDet_TFLITE(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False, agnostic_nms_classes=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms, agnostic_nms_classes)
 
     def _forward(self, x):
         self.model.set_tensor(self.input_id, x)
@@ -165,8 +192,8 @@ class RTMDet_TFLITE(RTMDet):
 
 
 class RTMDet_DLA(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False, agnostic_nms_classes=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms, agnostic_nms_classes)
 
     def _forward(self, x):
         y = self.model.run(x).reshape(1, -1, self.grids.shape[0])

@@ -3,7 +3,8 @@ camera:
     #crop_area: [0., 0., 1., 0.7277]  # 0.25, 0.25, 0.75, 0.75
     crop_area: []
     wh: [1280, 960]
-    video_path: 'output.mp4'
+    video_path: 'video/20260417_2.mp4'
+    max_fake_frames: 300  # for 影片檔, 當連續讀不到一定數量的 frame 時才跳出影片
 
 streamer:
     enable: true
@@ -12,37 +13,93 @@ streamer:
     route: /meal
     size: [640, 480]
     quality: 40
+    fps: null
+    force_stop: false  # 當使用者呼叫 stop 後是否立即停止
 
 AI:
     handwash:
-        path: 'best_0.9470_0.9810_epoch_77_handwash-746_my.onnx'
+        path: 'best_0.8330_0.8890_epoch_78_kura_v14.onnx'
         score_thresh: 0.5
-        iou_thresh: 0.4
+        iou_thresh: 0.1
         input_wh: [448, 448]
         agnostic_nms: false
+
         classes:
+            - 'palm to palm'
+            - 'palm over back'
+            - 'interlaced fingers'
+            - 'thumb or wrist scrub'
+            - 'scrub under nails'
+            - 'alcohol nozzle'
+            - 'gloved hand'
             - 'left'
             - 'right'
-            - 'step_1'
-            - 'step_2'
-            - 'step_3'
-            - 'step_4'
-            - 'step_5'
-            - 'step_6'
-            - 'step_7'
+            - 'nail brush'
+            - 'paper towel'
+            - 'air outlet'
+            - 'brush tray'
+            - 'faucet'
+            - 'sink'
+            - 'soap dispenser'
+        
+        agnostic_nms_classes:
+            - 'palm to palm'
+            - 'palm over back'
+            - 'interlaced fingers'
+            - 'thumb or wrist scrub'
+            - 'scrub under nails'
 
 log:
     folder: 'log'
     level: INFO
 
+csv:
+    save_dir: 'log/csv'
+    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+
 video:
+    enable: true  # 要不要啟動錄影
     base_dir: log/record/stream
     frame_w: 640
     frame_h: 480
     fps: 30
     periods: [
-        [11, 12],
-        [17, 18]
+        [0, 24]
     ]
     bitrate: 3
     suffix: ''
+    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+
+visualization:
+    bbox:
+        omit_classes:
+            - 'left'
+            - 'right'
+            - 'gloved hand'
+            - 'alcohol nozzle'
+            - 'nail brush'
+            - 'paper towel'
+            - 'air outlet'
+            - 'brush tray'
+            - 'faucet'
+            - 'sink'
+            - 'soap dispenser'
+        bbox_thickness: 2
+        plot_score: false
+        font_scale: 0.35
+        font_thickness: 1
+        text_padding: 1
+    timestamp:
+        font_scale: 0.8
+        thickness: 2
+        shadow_offset: 2
+
+logic:
+    trigger_buffer: 5           # 基礎緩衝幀數
+    scrub_verify_frames: 5      # 搓揉前驗證幀數
+    faucet_dist_thresh: 100      # 水龍頭附近判定距離 (px)
+    #soap_dist_thresh: 50       # 洗手液附近判定距離 (px)
+    soap_stay_frames: 2         # 洗手液停留幀數
+    alcohol_dist_thresh: 200    # 酒精噴灑判定距離 (px)
+    alcohol_trigger_frames: 5   # 酒精噴灑持續幀數
+    reset_time: 10              # 10 秒

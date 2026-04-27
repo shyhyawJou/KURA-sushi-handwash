@@ -11,7 +11,7 @@ from .timer import Timer
 
 
 class Camera:
-    def __init__(self, video_path, wh=(640, 480), crop_area=[]):
+    def __init__(self, video_path, wh=(640, 480), crop_area=[], max_fake_frames=10):
         """
         :param wh: Tuple (width, height)
         :param crop_area: Tuple (x1, y1, x2, y2) or None
@@ -24,16 +24,19 @@ class Camera:
         self.crop_coords = None
         self.video_path = video_path
         self.is_first_frame = True
+        self.max_fake_frames = max_fake_frames
+        self.n_fake_frame = 0
         
         # Threading & Queue
         self.frame_queue = queue.Queue(maxsize=1)
         self._thread = None
         self.capture = None
 
+        logger.info(f'video read: {video_path}')
         logger.info(f'set crop area: {self.crop_area}')
 
     def start(self):
-        """啟動背景取像執行緒"""
+        """開啟影片"""
         self._open()
         logger.info("VideoCapture started.")
 
@@ -67,14 +70,18 @@ class Camera:
         
         ret, frame = self.capture.read()
         if not ret:
-            return False, None
+            self.n_fake_frame += 1
+            return False if self.n_fake_frame == self.max_fake_frames else None, None
+
+        # 重置
+        self.n_fake_frame = 0
 
         if len(self.crop_area) > 0:
             if self.crop_coords is None:
                 self.crop_coords = self._cal_crop_region(*frame.shape[:2])
             x1, y1, x2, y2 = self.crop_coords
-            #with Timer('copy crop region of frame'):
-            frame = frame[y1:y2, x1:x2].copy()
+            with Timer('copy crop region of frame', silent=True):
+                frame = frame[y1:y2, x1:x2].copy()
 
         if self.is_first_frame:
             logger.info(f'frame (h, w): {(frame.shape[:2])}')
