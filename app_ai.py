@@ -181,7 +181,7 @@ def get_sort_key(path_obj):
 
 
 if __name__ == "__main__":
-    paths = sorted(p('video').glob('**/*.mp4'), key=get_sort_key)
+    paths = sorted(p('test').glob('**/*.mp4'), key=get_sort_key)
     for path in paths:
         try:
             VIDEO_PATH = path
