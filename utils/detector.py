@@ -29,7 +29,7 @@ class RTMDet:
         self.iou_thresh = iou_thresh
         #assert agnostic_nms ^ (agnostic_nms_classes is None or len(agnostic_nms_classes) == 0)
         if agnostic_nms_classes and len(agnostic_nms_classes) > 0:
-            self.agnostic_nms_labels = [i for i in range(len(classes)) if classes[i] in agnostic_nms_classes]
+            self.agnostic_nms_labels = [[classes.index(cls) for cls in group] for group in agnostic_nms_classes]
         else:
             self.agnostic_nms_labels = None
         self.strides = [8, 16, 32]
@@ -87,15 +87,16 @@ class RTMDet:
             #boxes_nms[:, 0] += offset
             #ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
 
-            # 類別敏感 NMS (包含「部分類別合併」的需求)
+            # 分組無類別 NMS 的 labels
             OFFSET_WH = 4096
             adjusted_labels = pred_labels.copy()
             
             # 如果有指定哪些類別要「忽略標籤差異、共同競爭」
             if self.agnostic_nms_labels:
-                target_cls = self.agnostic_nms_labels[0]
-                mask = np.isin(adjusted_labels, self.agnostic_nms_labels)
-                adjusted_labels[mask] = target_cls
+                for group in self.agnostic_nms_labels:
+                    target_cls = group[0]
+                    mask = np.isin(adjusted_labels, group)
+                    adjusted_labels[mask] = target_cls
                 
             offset = (adjusted_labels * OFFSET_WH).astype('float32')
             boxes_nms[:, 0] += offset

@@ -42,12 +42,19 @@ AI:
             - 'sink'
             - 'soap dispenser'
         
-        agnostic_nms_classes:
-            - 'palm to palm'
-            - 'palm over back'
-            - 'interlaced fingers'
-            - 'thumb or wrist scrub'
-            - 'scrub under nails'
+        agnostic_nms_classes:  # null 或是 [] 是 disable
+            -
+                - 'palm to palm'
+                - 'palm over back'
+                - 'interlaced fingers'
+                - 'thumb or wrist scrub'
+                - 'scrub under nails'
+            -
+                - 'left'
+                - 'right'
+
+device: 
+    path: 'utils/device.yaml'
 
 log:
     folder: 'log'
@@ -73,26 +80,32 @@ video:
 visualization:
     bbox:
         omit_classes:
-            - 'left'
-            - 'right'
+            #- 'left'
+            #- 'right'
             - 'gloved hand'
             - 'alcohol nozzle'
             - 'nail brush'
             - 'paper towel'
-            - 'air outlet'
-            - 'brush tray'
-            - 'faucet'
-            - 'sink'
-            - 'soap dispenser'
+            #- 'air outlet'
+            #- 'brush tray'
+            #- 'faucet'
+            #- 'sink'
+            #- 'soap dispenser'
         bbox_thickness: 2
         plot_score: false
         font_scale: 0.35
         font_thickness: 1
         text_padding: 1
+    
     timestamp:
         font_scale: 0.8
         thickness: 2
         shadow_offset: 2
+
+    result:
+        mode: 'center'
+        stay_time: 2  # 秒
+        num_block: 2
 
 logic:
     trigger_buffer: 5           # 基礎緩衝幀數
@@ -102,4 +115,4 @@ logic:
     soap_stay_frames: 2         # 洗手液停留幀數
     alcohol_dist_thresh: 200    # 酒精噴灑判定距離 (px)
     alcohol_trigger_frames: 5   # 酒精噴灑持續幀數
-    reset_time: 10              # 10 秒
+    reset_time: 5               # 秒

@@ -34,6 +34,17 @@ class HandWashTracker:
         interArea = max(0, xB - xA) * max(0, yB - yA)
         return interArea > 0
 
+    def _is_contained(self, boxA, boxB):
+        """
+        Check if boxA is completely inside boxB.
+        box format: [x1, y1, x2, y2]
+        """
+        is_inside = (boxA[0] >= boxB[0] and  # x1
+                     boxA[1] >= boxB[1] and  # y1
+                     boxA[2] <= boxB[2] and  # x2
+                     boxA[3] <= boxB[3])     # y2
+        return is_inside
+
     def _get_dist(self, boxA, boxB):
         cA = [(boxA[0] + boxA[2]) / 2, (boxA[1] + boxA[3]) / 2]
         cB = [(boxB[0] + boxB[2]) / 2, (boxB[1] + boxB[3]) / 2]
@@ -51,6 +62,7 @@ class HandWashTracker:
     def update(self, detections):
         now = datetime.now()
         hands = [d for d in detections if d['label'] in ['left', 'right']]
+        gloved_hands = [d for d in detections if d['label'] == 'gloved hand']
         dev = {d['label']: d['box'] for d in detections if d['label'] not in ['left', 'right', 'gloved hand']}
         all_labels = [d['label'] for d in detections]
         now_str = f'{now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]}Z'
@@ -70,7 +82,7 @@ class HandWashTracker:
         if len(hands) > 0:
             self.last_active_time = now
 
-        # --- Step 1 & 8: 沖水 (增加垂直位置約束：手必須在設備中心下方) ---
+        # --- Step 1 & 8: 沖水 ---
         if next_step in [1, 8]:
             target = 'faucet' if next_step == 1 else 'sink'
             is_active = False
@@ -111,13 +123,14 @@ class HandWashTracker:
         # --- 4. Step 3-7: 搓揉 ---
         elif 3 <= next_step <= 7:
             target_label = scrub_labels[next_step - 3]
-            if target_label in all_labels:
+            has_gloved = any(self._is_collided(g_h['box'], h['box']) for g_h in gloved_hands for h in hands)
+            if target_label in all_labels and not has_gloved:
                 self.buffer_count += 1
                 self.counts[next_step-1] += 1
                 if self.buffer_count >= self.cfg['scrub_verify_frames']:
                     self._trigger(next_step, now_str)
             else:
-                self.buffer_count = max(0, self.buffer_count - 1)
+                self.buffer_count = 0
 
         # --- 5. Step 9: 擦手紙 (與手交集且在 sink 範圍) ---
         elif next_step == 9:
@@ -127,7 +140,7 @@ class HandWashTracker:
                 for p_box in paper_boxes:
                     # 檢查紙張是否與手碰撞，且紙張是否位於水槽範圍內 (碰撞判定)
                     if any(self._is_collided(h['box'], p_box) for h in hands) and \
-                       self._is_collided(p_box, dev['sink']):
+                       self._is_contained(p_box, dev['sink']):
                         is_active = True
                         break
             self._handle_buffer(is_active, 9, now_str)
@@ -154,7 +167,7 @@ class HandWashTracker:
 
         # --- 8. Step 12: 酒精搓揉 ---
         elif next_step == 12:
-            is_active = self.alcohol_in_progress and any(lb in all_labels for lb in scrub_labels[:2])
+            is_active = self.alcohol_in_progress and any(lb in all_labels for lb in scrub_labels)
             self._handle_buffer(is_active, 12, now_str)
 
         if self.current_step == 12:

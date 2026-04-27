@@ -7,3 +7,5 @@ from .video import Video
 from .logger import setup_logger
 from .csv_manager import Csv_Manager
 from .hand_wash import HandWashTracker
+from .device import Device
+from .plot import Result

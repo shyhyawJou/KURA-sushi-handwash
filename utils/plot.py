@@ -1,4 +1,7 @@
 import cv2
+import numpy as np
+from typing import Sequence
+from loguru import logger
 
 
 
@@ -54,6 +57,43 @@ COLORS = [
     '483D8B',  # 深石板藍
     '708090'  # 石板灰
 ]
+
+
+class Result:
+    def __init__(self, mode, stay_time, num_block):
+        self.mode = mode
+        self.stay_time = stay_time
+        self.num_block = num_block
+
+        if self.mode != 'center':
+            raise ValueError(f'"{self.mode}" is the unknown mode of drawing result !')
+        
+    def draw_step(self, img, texts: Sequence):
+        img_h, img_w = img.shape[:2]
+
+        if self.mode == 'center':
+            x = np.linspace(0, img_w - 1, self.num_block * 2 + 1, endpoint=True)[1:-1:2]
+            y = np.linspace(0, img_h - 1, 5, endpoint=True)[1:2]
+            x, y = np.meshgrid(x, y, indexing='xy')
+            points = np.stack([x.ravel(), y.ravel()], axis=-1).astype(int)
+            assert len(texts) == len(points)
+
+            for text, point in zip(texts, points):
+                # 陰影
+                shadow_offset = 2
+                cv2.putText(img, text, point + shadow_offset, cv2.FONT_HERSHEY_SIMPLEX,
+                            1., (0, 0, 0), 2)
+
+                cv2.putText(img, text, point, cv2.FONT_HERSHEY_SIMPLEX, 1.,
+                            (0, 255, 0), 2)
+
+    def draw_region(self, img, bboxes, text):
+        bboxes = bboxes.astype(int)
+        for box in bboxes:
+            cv2.putText(img, text, box[2:4], cv2.FONT_HERSHEY_SIMPLEX, 1., (0, 0, 255), 2)
+
+    def _make_grids(self):
+        pass
 
 
 def hex_to_rgb(hex_str):
@@ -139,16 +179,8 @@ def plot_bbox(img,
         bg_bottom_right = (tx + label_w, ty + label_h)
 
         cv2.rectangle(img, bg_top_left, bg_bottom_right, (0, 0, 0), -1)
-        cv2.putText(
-            img,
-            text,
-            (tx + text_padding, ty + text_h + text_padding),
-            font,
-            font_scale,
-            (255, 255, 255),
-            font_thickness,
-            cv2.LINE_AA
-        )
+        cv2.putText(img, text, (tx + text_padding, ty + text_h + text_padding),
+                    font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
 
 
 def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offset=2):
