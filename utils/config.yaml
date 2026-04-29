@@ -14,7 +14,7 @@ streamer:
 
 AI:
     handwash:
-        path: 'best_0.8330_0.8890_epoch_78_kura_v14_fp16.dla'
+        path: 'best_0.8380_0.9060_epoch_91_kura_v16_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
