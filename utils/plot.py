@@ -1,4 +1,7 @@
 import cv2
+import numpy as np
+from typing import Sequence
+from loguru import logger
 
 
 
@@ -56,6 +59,43 @@ COLORS = [
 ]
 
 
+class Result:
+    def __init__(self, mode, stay_time, num_block):
+        self.mode = mode
+        self.stay_time = stay_time
+        self.num_block = num_block
+
+        if self.mode != 'center':
+            raise ValueError(f'"{self.mode}" is the unknown mode of drawing result !')
+        
+    def draw_step(self, img, texts: Sequence):
+        img_h, img_w = img.shape[:2]
+
+        if self.mode == 'center':
+            x = np.linspace(0, img_w - 1, self.num_block * 2 + 1, endpoint=True)[1:-1:2]
+            y = np.linspace(0, img_h - 1, 5, endpoint=True)[1:2]
+            x, y = np.meshgrid(x, y, indexing='xy')
+            points = np.stack([x.ravel(), y.ravel()], axis=-1).astype(int)
+            assert len(texts) == len(points)
+
+            for text, point in zip(texts, points):
+                # 陰影
+                shadow_offset = 2
+                cv2.putText(img, text, point + shadow_offset, cv2.FONT_HERSHEY_SIMPLEX,
+                            1., (0, 0, 0), 2)
+
+                cv2.putText(img, text, point, cv2.FONT_HERSHEY_SIMPLEX, 1.,
+                            (0, 255, 0), 2)
+
+    def draw_region(self, img, bboxes, text):
+        bboxes = bboxes.astype(int)
+        for box in bboxes:
+            cv2.putText(img, text, box[2:4], cv2.FONT_HERSHEY_SIMPLEX, 1., (0, 0, 255), 2)
+
+    def _make_grids(self):
+        pass
+
+
 def hex_to_rgb(hex_str):
     # 1. 去除可能存在的 '#' 或空白
     hex_str = hex_str.lstrip('#').strip()
@@ -73,60 +113,95 @@ def get_color(label):
     return hex_to_rgb(COLORS[label])
 
 
-def plot_bbox(img, boxes, labels, thickness=3):
-    if boxes.ndim == 1:
-        boxes = boxes[None, :]
-    if isinstance(labels, (int, str)):
-        labels = [labels]
-
-    assert boxes.shape[-1] == 4
-    formatted_boxes = boxes.astype(int).reshape(-1, 2, 2)
+def plot_bbox(img, 
+              boxes, 
+              pred_labels, 
+              scores, 
+              classes, 
+              bbox_thickness=2, 
+              omit_classes=set(), 
+              plot_score=True,
+              font_scale=0.55,
+              font_thickness=1,
+              text_padding=2):
     
-    for box, lb in zip(formatted_boxes, labels):
-        cv2.rectangle(img, tuple(box[0]), tuple(box[1]), get_color(lb), thickness)
-
-
-def plot_class(img, texts, classes, pred_labels, boxes, bbox_thickness=2):
-    if isinstance(texts, str):
-        texts = [texts]
+    # bbox
     if boxes.ndim == 1:
         boxes = boxes[None, :]
+    assert boxes.shape[-1] == 4
+    boxes = boxes.astype(int).reshape(-1, 4)
+    
+    # predict labels
+    if isinstance(pred_labels, (int, str)):
+        pred_labels = [pred_labels]
 
+    # 取得影像維度以進行邊界檢查
+    img_h, img_w, _ = img.shape
+    
+    # font
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.55
-    thickness = 1
-    padding = 2  
 
-    for text, box, pred_lb in zip(texts, boxes, pred_labels):
-        if not isinstance(text, str):
-            text = f'{classes[pred_lb]} {text * 100:.1f}'
+    # 忽略的類別
+    omit_classes = set(omit_classes)
 
-        # 取得文字大小
-        (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    for score, box, pred_lb in zip(scores, boxes, pred_labels):
+        cls = classes[pred_lb]
+        if cls in omit_classes:
+            continue
 
-        # 取得左上角座標
-        x1, y1 = int(box[0]), int(box[1])
+        # 畫 bbox
+        cv2.rectangle(img, tuple(box[:2]), tuple(box[2:4]), get_color(pred_lb), bbox_thickness)
 
-        # 內縮處理
-        inner_x = x1 + bbox_thickness
-        inner_y = y1 + bbox_thickness
+        text = f'{cls} {score * 100:.1f}%' if plot_score else cls
+        (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
+        label_h = text_h + baseline + text_padding * 2
+        label_w = text_w + text_padding * 2
 
-        # 背景框範圍
-        bg_top_left = (inner_x, inner_y)
-        bg_bottom_right = (
-            inner_x + text_w + padding * 2,
-            inner_y + text_h + baseline + padding * 2
-        )
+        x1, y1, x2, y2 = map(int, box[:4])
 
-        # 畫背景與文字
+        # --- 自動位置偵測邏輯 ---
+        # 預設位置：上方外側 (Top-Outside)
+        ty = y1 - label_h
+        
+        # 情況 A：上方超出影像邊界，嘗試切換到下方外側 (Bottom-Outside)
+        if ty < 0:
+            if y2 + label_h < img_h:
+                ty = y2
+            else:
+                # 情況 B：上下都沒空間（例如物體佔滿垂直空間），強行放在內部頂端 (Top-Inside)
+                ty = y1 + bbox_thickness
+
+        # 水平邊界修正：確保標籤不會超出左右邊緣
+        tx = max(0, min(x1, img_w - label_w))
+
+        # 背景與文字繪製
+        bg_top_left = (tx, ty)
+        bg_bottom_right = (tx + label_w, ty + label_h)
+
         cv2.rectangle(img, bg_top_left, bg_bottom_right, (0, 0, 0), -1)
-        cv2.putText(
-            img,
-            text,
-            (inner_x + padding, inner_y + text_h + padding),
-            font,
-            font_scale,
-            (255, 255, 255),
-            thickness,
-            cv2.LINE_AA
-        )
+        cv2.putText(img, text, (tx + text_padding, ty + text_h + text_padding),
+                    font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
+
+
+def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offset=2):
+    """
+    在影像右下角繪製帶有陰影的紅色時間戳
+    """
+    h, w = img.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    
+    # 取得文字寬高以便計算座標 (右下角)
+    (text_w, text_h), baseline = cv2.getTextSize(timestamp_str, font, font_scale, thickness)
+    
+    # 設定位置 (距離邊界 20 pixel)
+    x = w - text_w - 20
+    y = h - 20
+    
+    # 1. 畫陰影 (黑色，偏移 2 pixel)
+    shadow_offset = 2
+    cv2.putText(img, timestamp_str, (x + shadow_offset, y + shadow_offset), 
+                font, font_scale, (0, 0, 0), thickness)
+    
+    # 2. 畫主文字 (紅色 BGR: 0, 0, 255)
+    cv2.putText(img, timestamp_str, (x, y), 
+                font, font_scale, (0, 0, 255), thickness)

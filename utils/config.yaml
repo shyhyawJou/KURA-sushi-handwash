@@ -2,6 +2,7 @@ camera:
     #crop_area: [0., 0., 1., 0.677662037037037]  # 0.25, 0.25, 0.75, 0.75
     crop_area: [0., 0., 1., 0.7277]  # 0.25, 0.25, 0.75, 0.75
     wh: [1280, 960]
+    max_fake_frames: 300  # for 影片檔, 當連續讀不到一定數量的 frame 時才跳出影片
 
 streamer:
     enable: true
@@ -13,24 +14,57 @@ streamer:
 
 AI:
     handwash:
-        path: 'best_0.9690_0.9930_epoch_47_handwash-1472_fp16.dla'
+        path: 'best_0.8330_0.8890_epoch_78_kura_v14_fp16.dla'
         score_thresh: 0.5
-        iou_thresh: 0.4
+        iou_thresh: 0.1
         input_wh: [448, 448]
         agnostic_nms: false
+
         classes:
-            - step_1
-            - step_2
-            - step_3
-            - step_4
-            - step_5
-            - step_6
+            - 'palm to palm'
+            - 'palm over back'
+            - 'interlaced fingers'
+            - 'thumb or wrist scrub'
+            - 'scrub under nails'
+            - 'alcohol nozzle'
+            - 'gloved hand'
+            - 'left'
+            - 'right'
+            - 'nail brush'
+            - 'paper towel'
+            - 'air outlet'
+            - 'brush tray'
+            - 'faucet'
+            - 'sink'
+            - 'soap dispenser'
+        
+        agnostic_nms_classes:  # null 或是 [] 是 disable
+            -
+                - 'palm to palm'
+                - 'palm over back'
+                - 'interlaced fingers'
+                - 'thumb or wrist scrub'
+                - 'scrub under nails'
+            -
+                - 'left'
+                - 'right'
+
+device: 
+    path: 'utils/device.yaml'
 
 log:
     folder: '/mnt/reserved/log'
-    level: INFO
+    level: DEBUG
+
+throttled_logger:
+    log_interval: 10
+
+csv:
+    save_dir: '/mnt/reserved/csv'
+    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
 
 video:
+    enable: true  # 要不要啟動錄影
     base_dir: /mnt/reserved/record/stream
     frame_w: 640
     frame_h: 480
@@ -51,3 +85,48 @@ video:
     ]
     bitrate: 3
     suffix: ''
+    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+
+visualization:
+    bbox:
+        omit_classes:
+            #- 'left'
+            #- 'right'
+            #- 'gloved hand'
+            - 'alcohol nozzle'
+            - 'nail brush'
+            #- 'paper towel'
+            #- 'air outlet'
+            #- 'brush tray'
+            #- 'faucet'
+            #- 'sink'
+            #- 'soap dispenser'
+        bbox_thickness: 2
+        plot_score: false
+        font_scale: 0.35
+        font_thickness: 1
+        text_padding: 1
+    
+    timestamp:
+        font_scale: 0.8
+        thickness: 2
+        shadow_offset: 2
+
+    result:
+        mode: 'center'
+        stay_time: 2  # 秒
+        num_block: 2
+
+logic:
+    trigger_buffer: 5           # 基礎緩衝幀數
+    scrub_verify_frames: 5      # 搓揉前驗證幀數
+    faucet_dist_thresh: 100      # 水龍頭附近判定距離 (px)
+    #soap_dist_thresh: 50       # 洗手液附近判定距離 (px)
+    soap_stay_frames: 2         # 洗手液停留幀數
+    alcohol_dist_thresh: 200    # 酒精噴灑判定距離 (px)
+    alcohol_trigger_frames: 5   # 酒精噴灑持續幀數
+    reset_time: 5               # 秒
+
+udp:
+    ip: '127.0.0.1'
+    port: 10039

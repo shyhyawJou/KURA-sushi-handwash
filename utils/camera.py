@@ -6,12 +6,12 @@ import threading
 import queue
 from collections.abc import Iterable
 from loguru import logger
-from .timer import Timer
+from .image import resize_keep_scale
 
 
 
 class Camera:
-    def __init__(self, wh=(640, 480), crop_area=[]):
+    def __init__(self, wh=(640, 480), crop_area=[], max_fake_frames=10):
         """
         :param wh: Tuple (width, height)
         :param crop_area: Tuple (x1, y1, x2, y2) or None
@@ -24,6 +24,8 @@ class Camera:
         self.crop_coords = None
         self.device_path = ""
         self.is_first_frame = True
+        self.max_fake_frames = max_fake_frames
+        self.n_fake_frame = 0
         
         # Threading & Queue
         self.frame_queue = queue.Queue(maxsize=1)
@@ -34,7 +36,7 @@ class Camera:
         logger.info(f'set crop area: {self.crop_area}')
 
     def start(self):
-        """啟動背景取像執行緒"""
+        """開啟影片"""
         self._open()
         self._is_running = True
         self._thread = threading.Thread(target=self._update_loop, daemon=True)
@@ -44,7 +46,7 @@ class Camera:
     def get_latest_frame(self):
         """外部呼叫此方法取得最新畫面"""
         try:
-            return True, self.frame_queue.get(timeout=1.0)
+            return self._raw_read()
         except queue.Empty:
             return False, None
 
@@ -52,7 +54,7 @@ class Camera:
         """停止執行緒並釋放"""
         self._is_running = False
         if self._thread:
-            self._thread.join()
+            self._thread.join(1.)
 
     def set_crop(self, x1, y1, x2, y2):
         old = self.crop_area
@@ -87,8 +89,8 @@ class Camera:
 
         self.capture = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
         if not self.capture.isOpened():
-            raise ValueError(f"Failed to open camera: {self.device_path}")
-        
+            raise ValueError(f"Failed to open camera: {self.video_path}")
+
         logger.info(f"Camera initialized: {self.device_path} at {self.width}x{self.height}")
 
     def _raw_read(self):
@@ -98,14 +100,20 @@ class Camera:
         
         ret, frame = self.capture.read()
         if not ret:
-            return False, None
+            self.n_fake_frame += 1
+            return False if self.n_fake_frame == self.max_fake_frames else None, None
+
+        # 重置
+        self.n_fake_frame = 0
 
         if len(self.crop_area) > 0:
             if self.crop_coords is None:
                 self.crop_coords = self._cal_crop_region(*frame.shape[:2])
             x1, y1, x2, y2 = self.crop_coords
-            #with Timer('copy crop region of frame'):
             frame = frame[y1:y2, x1:x2].copy()
+
+        # resize
+        frame = resize_keep_scale(frame, (640, 480), 'corner')
 
         if self.is_first_frame:
             logger.info(f'frame (h, w): {(frame.shape[:2])}')
@@ -124,7 +132,7 @@ class Camera:
                         self.frame_queue.get_nowait()
                     except queue.Empty:
                         pass
-                self.frame_queue.put(frame)
+                self.frame_queue.put_nowait(frame)
         
         # 釋放資源
         self._release()

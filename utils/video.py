@@ -13,14 +13,29 @@ from .image import resize_keep_scale
 
 
 class Video:
-    def __init__(self, base_dir, frame_w, frame_h, fps, periods, bitrate=3, suffix=''):
+    def __init__(self, 
+                 base_dir, 
+                 frame_w, 
+                 frame_h, 
+                 fps, 
+                 periods, 
+                 bitrate=3, 
+                 suffix='', 
+                 enable=True, 
+                 output_path=None):
+        
+        self.is_enable = enable
+        if not self.is_enable:
+            logger.warning('錄影被設定成 "不啟動" !')
+
         self.base_dir = base_dir
         self.date = None
         self.hour = None
         self.period_idx = None
         self.video_writer = None
         self.time_writer = None
-        self.video_path = None
+        self.video_path = output_path
+        self.overwrite = output_path is not None
         self.time_path = None
         self.lock = Lock()
         self.write_thread = None
@@ -36,6 +51,9 @@ class Video:
         self._init_writer()
 
     def write_frame(self, frame):
+        if not self.is_enable:
+            return
+
         if self._change_period():
             logger.info('錄影時段發生變動 !')
             self._clear_queue()
@@ -55,6 +73,9 @@ class Video:
         return self.period_idx is not None
 
     def stop(self):
+        if not self.is_enable:
+            return
+    
         self._stop_write()
 
         with self.lock:
@@ -62,9 +83,9 @@ class Video:
                 try:
                     self.video_writer.release()
                     size = os.stat(self.video_path).st_size / 1e6
-                    logger.info(f'保存 {self.video_path} 成功, ' \
-                                f'共寫入 {self.num_write} 幀, ' \
-                                f'大小: {size} MB !')
+                    logger.success(f'保存 {self.video_path} 成功, ' \
+                                   f'共寫入 {self.num_write} 幀, ' \
+                                   f'大小: {size} MB !')
                 except:
                     logger.error(f'保存 {self.video_path} 失敗, 錯誤: {traceback.format_exc()}  !')
                 finally:
@@ -76,7 +97,7 @@ class Video:
                 try:
                     self.time_writer.flush()
                     self.time_writer.close()
-                    logger.info(f'保存時戳檔 {self.time_path} 成功 !')
+                    logger.success(f'保存時戳檔 {self.time_path} 成功 !')
                 except:
                     logger.error(f'保存時戳檔 {self.time_path} 失敗, 錯誤: {traceback.format_exc()}  !')
                 finally:
@@ -87,13 +108,13 @@ class Video:
             try:
                 with open(self.finish_marker_path, 'w'):
                     pass
-                logger.info(f'保存結束標記檔 {self.finish_marker_path} 成功 !')
+                logger.success(f'保存結束標記檔 {self.finish_marker_path} 成功 !')
             except:
                 logger.error(f'保存結束標記檔 {self.finish_marker_path} 失敗, 錯誤: {traceback.format_exc()} !')
             finally:
                 self.finish_marker_path = None
 
-        logger.info('已成功釋放影片相關資源 !')
+        logger.success('已成功釋放影片相關資源 !')
 
     def _init_writer(self):
         self._decide_path()
@@ -145,9 +166,6 @@ class Video:
     def _decide_path(self):
         self._update_state()
 
-        base_dir = f'{self.base_dir}/{self.date}'
-        os.makedirs(base_dir, exist_ok=True)
-        logger.info(f'影片資料夾: {base_dir}, 會錄影的時段: {self.working_hours}')
         
         self.period_idx = self._find_period()
 
@@ -158,9 +176,24 @@ class Video:
             logger.warning('現在不是錄影時段, 不進行錄影 !')
         else:
             period_idx = self.period_idx + 1
-            self.video_path = f'{self.base_dir}/{self.date}/{self.date}{self.suffix}_{period_idx}.mp4'
-            self.time_path = f'{self.base_dir}/{self.date}/{self.date}{self.suffix}_{period_idx}.csv'
-            self.finish_marker_path = f'{self.base_dir}/{self.date}/{self.date}{self.suffix}_{period_idx}.txt'
+            if self.video_path:
+                video_path = p(self.video_path)
+
+                base_dir = f'{self.base_dir}/{"/".join(video_path.parts[-3:-1])}'
+                os.makedirs(base_dir, exist_ok=True)
+                logger.info(f'影片資料夾: {base_dir}, 會錄影的時段: {self.working_hours}')
+                
+                self.video_path = f'{base_dir}/{video_path.stem}_result.mp4'
+                self.time_path = f'{base_dir}/{video_path.stem}_result.csv'
+                self.finish_marker_path = f'{base_dir}/{video_path.stem}_result.txt'
+            else:
+                base_dir = f'{self.base_dir}/{self.date}'
+                os.makedirs(base_dir, exist_ok=True)
+                logger.info(f'影片資料夾: {base_dir}, 會錄影的時段: {self.working_hours}')
+                
+                self.video_path = f'{self.base_dir}/{self.date}/{self.date}{self.suffix}_{period_idx}.mp4'
+                self.time_path = f'{self.base_dir}/{self.date}/{self.date}{self.suffix}_{period_idx}.csv'
+                self.finish_marker_path = f'{self.base_dir}/{self.date}/{self.date}{self.suffix}_{period_idx}.txt'
 
             if exists(self.video_path):
                 try:
@@ -207,7 +240,7 @@ class Video:
             f'v4l2h264enc extra-controls="encode,video_bitrate={self.bitrate}000000,video_gop_size={self.fps}" ! '
             f'h264parse ! mp4mux ! filesink location={self.video_path} sync=false'
         )
-        
+
         writer = cv2.VideoWriter(
             pipeline,
             cv2.CAP_GSTREAMER,
@@ -257,10 +290,15 @@ class Video:
     def _stop_write(self):
         self.running = False
         if self.write_thread:
-            self.write_thread.join(2.)
+            self.write_thread.join(10.)
         self.write_thread = None
     
     def _new_path(self, path):
+        if self.overwrite:
+            if p(path).stem == '.mp4':
+                logger.warning('現在沒有啟動自動迭代新路徑, 所以輸出影片檔會覆蓋同名的影片檔案 !')
+            return path
+
         path = p(path)
         paths = sorted(mp4_path for mp4_path in p(dirname(path)).glob('*.mp4') 
                        if mp4_path.stem.startswith(path.stem))
