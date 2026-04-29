@@ -13,12 +13,10 @@ streamer:
     route: /meal
     size: [640, 480]
     quality: 40
-    fps: null
-    force_stop: false  # 當使用者呼叫 stop 後是否立即停止
 
 AI:
     handwash:
-        path: 'best_0.8330_0.8890_epoch_78_kura_v14.onnx'
+        path: 'best_0.8380_0.9060_epoch_91_kura_v16.onnx'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
@@ -60,6 +58,9 @@ log:
     folder: 'log'
     level: INFO
 
+throttled_logger:
+    log_interval: 10
+
 csv:
     save_dir: 'log/csv'
     output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
@@ -82,10 +83,10 @@ visualization:
         omit_classes:
             #- 'left'
             #- 'right'
-            - 'gloved hand'
+            #- 'gloved hand'
             - 'alcohol nozzle'
             - 'nail brush'
-            - 'paper towel'
+            #- 'paper towel'
             #- 'air outlet'
             #- 'brush tray'
             #- 'faucet'
@@ -116,3 +117,7 @@ logic:
     alcohol_dist_thresh: 200    # 酒精噴灑判定距離 (px)
     alcohol_trigger_frames: 5   # 酒精噴灑持續幀數
     reset_time: 5               # 秒
+
+udp:
+    ip: '127.0.0.1'
+    port: 10039

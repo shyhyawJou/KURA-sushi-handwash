@@ -27,11 +27,12 @@ class RTMDet:
         self.agnostic_nms = agnostic_nms
         self.score_thresh = score_thresh
         self.iou_thresh = iou_thresh
-        #assert agnostic_nms ^ (agnostic_nms_classes is None or len(agnostic_nms_classes) == 0)
+
         if agnostic_nms_classes and len(agnostic_nms_classes) > 0:
             self.agnostic_nms_labels = [[classes.index(cls) for cls in group] for group in agnostic_nms_classes]
         else:
             self.agnostic_nms_labels = None
+            
         self.strides = [8, 16, 32]
         self.mean = np.asarray([103.53, 116.28, 123.675], 'float32')
         self.std = np.asarray([57.375, 57.12, 58.395], 'float32')
@@ -82,11 +83,6 @@ class RTMDet:
         if self.agnostic_nms:
             ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
         else:
-            #OFFSET_WH = 4096
-            #offset = OFFSET_WH * pred_labels
-            #boxes_nms[:, 0] += offset
-            #ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
-
             # 分組無類別 NMS 的 labels
             OFFSET_WH = 4096
             adjusted_labels = pred_labels.copy()

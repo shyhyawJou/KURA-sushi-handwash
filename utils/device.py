@@ -2,6 +2,7 @@ import yaml
 import json
 from collections import defaultdict
 import numpy as np
+from os.path import exists
 from loguru import logger
 
 
@@ -31,7 +32,7 @@ class Device:
     
 
 def save_device():
-    JSON_PATH = 'z1_20260410_this.json'
+    JSON_PATH = 'z1_20260409_this.json'
     SAVE_PATH = 'utils/device.yaml'
     MAC = '0793'
 
@@ -49,7 +50,13 @@ def save_device():
         labels[info['label']].append([x1, y1, x2, y2])
 
     # final
-    final_data = {MAC: dict(labels)}
+    if exists(SAVE_PATH):
+        with open(SAVE_PATH) as f:
+            final_data = yaml.safe_load(f)
+        final_data[MAC] = dict(labels)
+        print(f'{SAVE_PATH} 已存在且更新完畢 !')
+    else:
+        final_data = {MAC: dict(labels)}
 
     with open(SAVE_PATH, 'w') as f:
         yaml.safe_dump(final_data, f, indent=4)

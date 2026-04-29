@@ -6,7 +6,7 @@ import threading
 import queue
 from collections.abc import Iterable
 from loguru import logger
-from .timer import Timer
+from .image import resize_keep_scale
 
 
 
@@ -80,8 +80,10 @@ class Camera:
             if self.crop_coords is None:
                 self.crop_coords = self._cal_crop_region(*frame.shape[:2])
             x1, y1, x2, y2 = self.crop_coords
-            with Timer('copy crop region of frame', silent=True):
-                frame = frame[y1:y2, x1:x2].copy()
+            frame = frame[y1:y2, x1:x2].copy()
+
+        # resize
+        frame = resize_keep_scale(frame, (640, 480), 'corner')
 
         if self.is_first_frame:
             logger.info(f'frame (h, w): {(frame.shape[:2])}')

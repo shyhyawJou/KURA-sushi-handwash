@@ -71,7 +71,7 @@ class HandWashTracker:
         next_step = self.current_step + 1
 
         # --- 1. 超時重置 ---
-        if (now - self.last_active_time).total_seconds() > self.cfg['reset_time']:
+        if self.current_step > 0 and (now - self.last_active_time).total_seconds() > self.cfg['reset_time']:
             if self.current_step > 0:
                 logger.warning(f"[{self.zone_name}] Session timeout, resetting from step {self.current_step}...")
                 res = self._get_final_data(now_str)

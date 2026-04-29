@@ -8,7 +8,8 @@ from time import sleep, time
 import numpy as np
 from loguru import logger
 from .image import resize_keep_scale
-from .timer import Timer
+
+
 
 class Mjpeg_Streamer:
     def __init__(self, 
@@ -17,15 +18,12 @@ class Mjpeg_Streamer:
                  route="/meal", 
                  size=(640, 480), 
                  quality=60, 
-                 enable=True, 
-                 fps=None, 
-                 force_stop=True):
+                 enable=True):
         
         self.host = host
         self.port = port
         self.route = route
         self.stream_size = size
-        self.fps = fps
         self.quality = quality
         
         # 使用 Queue 來解耦主程序與處理程序
@@ -34,7 +32,6 @@ class Mjpeg_Streamer:
         
         self.is_enable = enable
         self.is_running = False
-        self.force_stop = force_stop
         
         if not self.is_enable: 
             logger.info(f'Streamer is disabled.')
@@ -59,15 +56,14 @@ class Mjpeg_Streamer:
                 # 取得原始影格，設定 timeout 避免死鎖
                 frame = self.frame_queue.get(timeout=1)
                 
-                with Timer('process streamer', silent=True):
-                    # 在背景執行緒處理耗時的 resize 與編碼
-                    processed_frame = resize_keep_scale(frame, self.stream_size, 'center')
-                    ret, buffer = cv2.imencode('.jpg', processed_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
-                    
-                    if ret:
-                        # 封裝成標準的 MJPEG 影格格式
-                        self.processed_bytes = (b'--frame\r\n'
-                                               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                # 在背景執行緒處理耗時的 resize 與編碼
+                processed_frame = resize_keep_scale(frame, self.stream_size, 'corner')
+                ret, buffer = cv2.imencode('.jpg', processed_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
+                
+                if ret:
+                    # 封裝成標準的 MJPEG 影格格式
+                    self.processed_bytes = (b'--frame\r\n'
+                                            b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
                 
                 # 完成後標記任務
                 self.frame_queue.task_done()
@@ -77,32 +73,27 @@ class Mjpeg_Streamer:
                 logger.error(f"Worker processing error: {e}")
 
     def _generate(self):
-        """發送執行緒：僅負責發送處理好的內容"""
-        last = 0
-        target_interval = 1. / self.fps if self.fps and self.fps > 0 else 0
-
-        while self.is_running:
-            if self.processed_bytes is None:
-                sleep(0.01)
-                continue
-
-            cur = time()
-            if cur - last < target_interval:
-                # 精確計算休眠時間
-                sleep_time = max(0.001, target_interval - (cur - last))
-                sleep(sleep_time)
-                continue
-            
-            last = cur
-            yield self.processed_bytes
-            
-            if target_interval == 0:
-                sleep(0.01)
+        """發送執行緒：負責控制 FPS 並發送處理好的內容"""
+        logger.info("Stream generator started.")
+        try:
+            while self.is_running:
+                if self.processed_bytes is None:
+                    sleep(0.01) # 稍微增加間隔減少 CPU 負擔
+                    continue
+                
+                yield self.processed_bytes
+                
+                #
+                sleep(0.005)
+        except Exception as e:
+            logger.debug(f"Streaming connection closed: {e}")
+        finally:
+            logger.warning('Stream generator loop exited')
 
     def start(self):
         """啟動伺服器與背景處理執行緒"""
         if self.is_running:
-            print("[!] Streamer is already running.")
+            logger.info("[!] Streamer is already running.")
             return
         
         if not self.is_enable:
@@ -123,31 +114,34 @@ class Mjpeg_Streamer:
 
         self.server_thread = threading.Thread(target=run_server, daemon=True)
         self.server_thread.start()
-        print(f"[*] MJPEG Streamer started at http://{self.host}:{self.port}{self.route}")
+        logger.success(f"[*] MJPEG Streamer started at http://{self.host}:{self.port}{self.route}")
 
     def stop(self):
         """釋放資源"""
-        print("[*] Stopping MJPEG Streamer...")
+        if not self.is_running:
+            return
+
+        logger.info("[*] Stopping MJPEG Streamer...")
         self.is_running = False 
         
+        # 1. 停止 Uvicorn Server (這會主動切斷所有 FastAPI 的 StreamingResponse)
         if self.server:
             self.server.should_exit = True
         
-        self.processed_bytes = None
-        
-        # 清空 Queue
+        # 2. 清空 Queue 並放入一個 None 作為 Sentinel (哨兵值) 讓 Worker 退出
         while not self.frame_queue.empty():
             try:
                 self.frame_queue.get_nowait()
             except queue.Empty:
                 break
-
+        
+        # 4. 等待執行緒結束
         if self.server_thread:
-            self.server_thread.join(timeout=2)
+            self.server_thread.join(timeout=10)
         if self.worker_thread:
-            self.worker_thread.join(timeout=2)
+            self.worker_thread.join(timeout=10)
             
-        print("[*] MJPEG Streamer resources released.")
+        logger.success("[*] MJPEG Streamer resources released.")
 
     def push_frame(self, frame):
         """更新影像：現在這對主程序來說非常快"""

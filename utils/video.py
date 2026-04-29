@@ -282,7 +282,7 @@ class Video:
     def _stop_write(self):
         self.running = False
         if self.write_thread:
-            self.write_thread.join(2.)
+            self.write_thread.join(10.)
         self.write_thread = None
     
     def _new_path(self, path):

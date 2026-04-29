@@ -5,6 +5,7 @@ import traceback
 import socket
 from loguru import logger
 from tqdm import tqdm
+from time import time
 from datetime import datetime
 from pathlib import Path as p
 import re
@@ -13,15 +14,15 @@ import socket
 from utils import (Mjpeg_Streamer, 
                    RTMDet_ONNX, 
                    Camera,
-                   Timer,
                    Video,
                    plot_bbox, 
-                   setup_logger,
+                   setup_logger, Throttled_Logger,
                    Csv_Manager,
                    HandWashTracker,
                    draw_timestamp,
                    Device,
-                   Result)
+                   Result,
+                   Timer)
 
 
 VIDEO_PATH = None
@@ -29,11 +30,14 @@ VIDEO_PATH = None
 
 with open('utils/config.yaml') as f:
     CFG = yaml.safe_load(f)
-    logger.success(f'config: {CFG}')
+    logger.info(f'config: {CFG}')
 
 
 class App_HandWash:
     def __init__(self, device_code):
+        setup_logger(**CFG['log'], suffix=device_code)
+
+        self.throttled_logger = Throttled_Logger(**CFG['throttled_logger'])
         self.is_running = False
 
         CFG['camera']['video_path'] = VIDEO_PATH  # 要讀取的影片
@@ -55,21 +59,24 @@ class App_HandWash:
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
 
+        logger.success('all init succeeded !')
+
     def run(self):
         try:
             self.camera.start()
             self.streamer.start()
             self.is_running = True
-            
+            loop_timer = Timer('one complete loop', silent=True)
+
             logger.info("Main loop started.")
 
             # 進度條
             pbar = tqdm(unit='frame', desc='Processing')
 
             while self.is_running:
-                with Timer('one complete loop', silent=True):
+                with loop_timer:
                     ret, frame = self.camera.get_latest_frame()
-                    
+
                     pbar.update(1)
 
                     if ret is None:
@@ -78,10 +85,9 @@ class App_HandWash:
                     elif ret is False:
                         logger.error(f"{VIDEO_PATH} stop at {pbar.n} frame !")
                         break
-
+                                            
                     # AI Inference
-                    with Timer("AI detect", silent=True):
-                        scores, boxes, pred_labels = self.ai_model(frame)
+                    scores, boxes, pred_labels = self.ai_model(frame)
 
                     # 裝置 (水龍頭、水槽等物件)
                     dev_names, dev_bboxes = self.device.named_bboxes
@@ -117,28 +123,30 @@ class App_HandWash:
                         self.csv_manager.write_record(res_r)
 
                     # visualization
-                    with Timer('copy frame', silent=True):
-                        frame_copy = frame.copy()
+                    frame_copy = frame.copy()
 
-                        current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
-                                         f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
-                        self.result_drawer.draw_step(frame_copy, current_steps)
-                        #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
-                        #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
+                    current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
+                                     f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
+                    self.result_drawer.draw_step(frame_copy, current_steps)
+                    #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
+                    #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
 
-                        plot_bbox(frame_copy, 
-                                  boxes,
-                                  pred_labels, 
-                                  scores, 
-                                  self.ai_model.classes, 
-                                  **CFG['visualization']['bbox'])
-                        
-                        now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
-                        draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
+                    plot_bbox(frame_copy, 
+                              boxes,
+                              pred_labels, 
+                              scores, 
+                              self.ai_model.classes, 
+                              **CFG['visualization']['bbox'])
+                    
+                    now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
+                    draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
 
                     # Push to Streamer
                     self.streamer.push_frame(frame_copy) 
-                    self.video.write_frame(frame_copy)
+                    self.video.write_frame(frame)
+
+                # log
+                self.throttled_logger.log(f'[{loop_timer.name}] {loop_timer.elapsed:.3f} (s)', 'DEBUG')
 
             pbar.close()
 
@@ -158,8 +166,8 @@ class App_HandWash:
             return
         self.is_running = False
         
+        self.camera.stop()
         self.streamer.stop()
-        self.camera.stop() # 統一透過物件釋放
         self.video.stop()
 
         logger.success("Program exited safely.")
@@ -211,7 +219,6 @@ if __name__ == "__main__":
         try:
             VIDEO_PATH = path
             device_code = socket.gethostname().split('-')[-1]
-            setup_logger(**CFG['log'], suffix=device_code)
             app = App_HandWash(device_code)
             app.run()
         except SystemExit:
