@@ -59,6 +59,30 @@ COLORS = [
 ]
 
 
+DISTANCE_COLOR = [
+    (0, 0, 255),      # 01. 紅色 (Red) - 初始顏色
+    (0, 255, 0),      # 02. 亮綠 (Green)
+    (255, 0, 255),    # 03. 品紅 (Magenta)
+    (0, 255, 255),    # 04. 黃色 (Yellow)
+    (255, 255, 0),    # 05. 青色 (Cyan)
+    (0, 165, 255),    # 06. 橘色 (Orange)
+    (255, 128, 0),    # 07. 亮蔚藍 (Bright Azure) - 用來替代純藍，但更偏青
+    (128, 0, 128),    # 08. 紫色 (Purple)
+    (0, 250, 154),    # 09. 中春綠 (Medium Spring Green)
+    (203, 192, 255),  # 10. 粉紅 (Pink)
+    (0, 128, 0),      # 11. 深綠 (Dark Green)
+    (255, 255, 255),  # 12. 白色 (White)
+    (42, 42, 165),    # 13. 棕色 (Brown)
+    (128, 128, 0),    # 14. 深青 (Teal)
+    (0, 0, 128),      # 15. 深紅 (Maroon)
+    (209, 206, 0),    # 16. 天藍 (Sky Blue)
+    (0, 215, 255),    # 17. 金色 (Gold)
+    (130, 0, 255),    # 18. 霓虹紫 (Neon Purple)
+    (128, 128, 128),  # 19. 灰色 (Gray)
+    (30, 105, 210)    # 20. 巧克力色 (Chocolate)
+]
+
+
 class Result:
     def __init__(self, mode, stay_time, num_block):
         self.mode = mode
@@ -181,6 +205,27 @@ def plot_bbox(img,
         cv2.rectangle(img, bg_top_left, bg_bottom_right, (0, 0, 0), -1)
         cv2.putText(img, text, (tx + text_padding, ty + text_h + text_padding),
                     font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
+
+
+def plot_distance(img, boxA, boxB, distance, color):
+    """ 畫在 boxA 附近 """
+    distance = int(distance)
+    ctr_A = ((boxA[0:2] + boxA[2:4]) / 2.).astype(int)
+    ctr_B = ((boxB[0:2] + boxB[2:4]) / 2.).astype(int)
+    org = np.int64((ctr_A + ctr_B) / 2.)
+    cv2.line(img, ctr_A, ctr_B, (0, 255, 0), 2)
+    cv2.putText(img, str(distance), org, cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
+
+def plot_xy(img, xy, org):
+    xy = np.array(xy).astype(int)
+    org = np.array(org).astype(int)
+    cv2.putText(img, f'{xy}', org, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+
+
+def plot_timeout(img, name, elapsed, org, color):
+    org = np.array(org).astype(int)
+    cv2.putText(img, f'[{name}] {elapsed:.1f}', org, cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
 
 def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offset=2):

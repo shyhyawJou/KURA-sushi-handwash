@@ -43,14 +43,16 @@ class App_HandWash:
         self.camera = Camera(**CFG['camera'])
         self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.ai_model = RTMDet_DLA(**CFG['AI']['handwash'])
-        self.device = Device(**CFG['device'], device_code=device_code)
         self.video = Video(**CFG['video'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.result_drawer = Result(**CFG['visualization']['result'])
+        self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
 
         # 檢測洗手
-        self.tracker_left = HandWashTracker(zone_name="Left", logic_cfg=CFG['logic'])
-        self.tracker_right = HandWashTracker(zone_name="Right", logic_cfg=CFG['logic'])
+        self.tracker_left = HandWashTracker(zone_name="Left", devices=self.device.left_data,
+                                            ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
+        self.tracker_right = HandWashTracker(zone_name="Right", devices=self.device.right_data, 
+                                             ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
 
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
@@ -76,48 +78,44 @@ class App_HandWash:
                     # AI Inference
                     scores, boxes, pred_labels = self.ai_model(frame)
 
-                    # 裝置 (水龍頭、水槽等物件)
-                    dev_names, dev_bboxes = self.device.named_bboxes
-                    scores = np.concatenate([scores, [1.] * len(dev_names)])
-                    boxes = np.concatenate([boxes, dev_bboxes], 0)
-                    pred_labels = np.concatenate([pred_labels, [self.ai_model.classes.index(name) for name in dev_names]])
-
+                    # 把 detections 分至左右區
                     h, w = frame.shape[:2]
                     mid_x = w // 2
+                    
+                    # detections
+                    center_x = boxes[:, 0:3:2].mean(1)
+                    is_left = center_x < mid_x
+                    left_dets = {
+                        'box': boxes[is_left], 
+                        'label': pred_labels[is_left], 
+                        'score': scores[is_left]
+                    }
+                    right_dets = {
+                        'box': boxes[~is_left], 
+                        'label': pred_labels[~is_left], 
+                        'score': scores[~is_left]
+                    }
 
-                    # 分類偵測結果至左右區
-                    left_dets = []
-                    right_dets = []
-                    for score, box, label_idx in zip(scores, boxes, pred_labels):
-                        label = self.ai_model.classes[label_idx]
-                        det = {'box': box, 'label': label, 'score': score}  # label 是類別
-                        center_x = (box[0] + box[2]) / 2
-                        if label == 'sink':
-                            left_dets.append(det)
-                            right_dets.append(det)
-                        elif center_x < mid_x:
-                            left_dets.append(det)
-                        else:
-                            right_dets.append(det)
+                    # 複製一份 frame
+                    frame_copy = frame.copy()
 
-                    # 更新邏輯
-                    now, res_l = self.tracker_left.update(left_dets)
+                    # 洗手檢測
+                    now, res_l = self.tracker_left.update(left_dets, frame_copy)
                     if res_l: 
                         self.csv_manager.write_record(res_l)
 
-                    now, res_r = self.tracker_right.update(right_dets)
+                    now, res_r = self.tracker_right.update(right_dets, frame_copy)
                     if res_r: 
                         self.csv_manager.write_record(res_r)
 
                     # visualization
-                    frame_copy = frame.copy()
-
                     current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
                                      f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
                     self.result_drawer.draw_step(frame_copy, current_steps)
                     #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
                     #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
 
+                    # 畫 detections
                     plot_bbox(frame_copy, 
                               boxes,
                               pred_labels, 
@@ -125,6 +123,23 @@ class App_HandWash:
                               self.ai_model.classes, 
                               **CFG['visualization']['bbox'])
                     
+                    # 畫左 devices
+                    plot_bbox(frame_copy, 
+                              self.device.left_bboxes,
+                              self.device.left_labels, 
+                              ([1.] * len(self.device.left_labels)), 
+                              self.ai_model.classes, 
+                              **CFG['visualization']['bbox'])
+
+                    # 畫右 devices
+                    plot_bbox(frame_copy, 
+                              self.device.right_bboxes,
+                              self.device.right_labels, 
+                              [1.] * len(self.device.right_labels), 
+                              self.ai_model.classes, 
+                              **CFG['visualization']['bbox'])
+
+                    # 畫時間戳
                     now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
                     draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
 
