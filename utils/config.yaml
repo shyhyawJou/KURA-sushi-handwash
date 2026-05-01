@@ -64,7 +64,7 @@ log:
     level: INFO
 
 throttled_logger:
-    log_interval: 10
+    log_interval: 60
 
 csv:
     save_dir: 'log/csv'

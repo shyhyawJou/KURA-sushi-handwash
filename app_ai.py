@@ -16,28 +16,23 @@ from utils import (Mjpeg_Streamer,
                    Camera,
                    Video,
                    plot_bbox, 
-                   setup_logger, Throttled_Logger,
+                   setup_logger, MY_LOGGER,
                    Csv_Manager,
                    HandWashTracker,
                    draw_timestamp,
                    Device,
                    Result,
-                   Timer)
+                   Timer,
+                   CFG)
 
 
 VIDEO_PATH = None
-
-
-with open('utils/config.yaml') as f:
-    CFG = yaml.safe_load(f)
-    logger.info(f'config: {CFG}')
 
 
 class App_HandWash:
     def __init__(self, device_code):
         setup_logger(**CFG['log'], suffix=device_code)
 
-        self.throttled_logger = Throttled_Logger(**CFG['throttled_logger'])
         self.is_running = False
 
         CFG['camera']['video_path'] = VIDEO_PATH  # 要讀取的影片
@@ -68,7 +63,17 @@ class App_HandWash:
             self.camera.start()
             self.streamer.start()
             self.is_running = True
+
+            # timer
             loop_timer = Timer('one complete loop', silent=True)
+            read_frame_timer = Timer('read frame', silent=True)
+            split_timer = Timer('split detections into two', silent=True)
+            ai_timer = Timer('AI forward', silent=True)
+            handwash_timer = Timer('handwash detection', silent=True)
+            draw_result_timer = Timer('draw result', silent=True)
+            frame_copy_timer = Timer('frame copy', silent=True)
+            streamer_timer = Timer('push frame to streamer', silent=True)
+            video_timer = Timer('write frame to video', silent=True)
 
             logger.info("Main loop started.")
 
@@ -77,7 +82,9 @@ class App_HandWash:
 
             while self.is_running:
                 with loop_timer:
-                    ret, frame = self.camera.get_latest_frame()
+                    # read frame
+                    with read_frame_timer:
+                        ret, frame = self.camera.get_latest_frame()
 
                     pbar.update(1)
 
@@ -89,80 +96,97 @@ class App_HandWash:
                         break
                                             
                     # AI Inference
-                    scores, boxes, pred_labels = self.ai_model(frame)
+                    with ai_timer:
+                        scores, boxes, pred_labels = self.ai_model(frame)
 
                     # 把 detections 分至左右區
-                    h, w = frame.shape[:2]
-                    mid_x = w // 2
-                    
-                    # detections
-                    center_x = boxes[:, 0:3:2].mean(1)
-                    is_left = center_x < mid_x
-                    left_dets = {
-                        'box': boxes[is_left], 
-                        'label': pred_labels[is_left], 
-                        'score': scores[is_left]
-                    }
-                    right_dets = {
-                        'box': boxes[~is_left], 
-                        'label': pred_labels[~is_left], 
-                        'score': scores[~is_left]
-                    }
+                    with split_timer:
+                        h, w = frame.shape[:2]
+                        mid_x = w // 2
+                        
+                        # detections
+                        center_x = boxes[:, 0:3:2].mean(1)
+                        is_left = center_x < mid_x
+                        left_dets = {
+                            'box': boxes[is_left], 
+                            'label': pred_labels[is_left], 
+                            'score': scores[is_left]
+                        }
+                        right_dets = {
+                            'box': boxes[~is_left], 
+                            'label': pred_labels[~is_left], 
+                            'score': scores[~is_left]
+                        }
 
                     # 複製一份 frame
-                    frame_copy = frame.copy()
+                    with frame_copy_timer:
+                        frame_copy = frame.copy()
 
                     # 洗手檢測
-                    now, res_l = self.tracker_left.update(left_dets, frame_copy)
-                    if res_l: 
-                        self.csv_manager.write_record(res_l)
+                    with handwash_timer:
+                        now, res_l = self.tracker_left.update(left_dets, frame_copy)
+                        if res_l: 
+                            self.csv_manager.write_record(res_l)
 
-                    now, res_r = self.tracker_right.update(right_dets, frame_copy)
-                    if res_r: 
-                        self.csv_manager.write_record(res_r)
+                        now, res_r = self.tracker_right.update(right_dets, frame_copy)
+                        if res_r: 
+                            self.csv_manager.write_record(res_r)
 
                     # visualization
-                    current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
-                                     f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
-                    self.result_drawer.draw_step(frame_copy, current_steps)
-                    #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
-                    #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
+                    with draw_result_timer:
+                        current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
+                                         f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
+                        self.result_drawer.draw_step(frame_copy, current_steps)
+                        #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
+                        #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
 
-                    # 畫 detections
-                    plot_bbox(frame_copy, 
-                              boxes,
-                              pred_labels, 
-                              scores, 
-                              self.ai_model.classes, 
-                              **CFG['visualization']['bbox'])
-                    
-                    # 畫左 devices
-                    plot_bbox(frame_copy, 
-                              self.device.left_bboxes,
-                              self.device.left_labels, 
-                              ([1.] * len(self.device.left_labels)), 
-                              self.ai_model.classes, 
-                              **CFG['visualization']['bbox'])
+                        # 畫 detections
+                        plot_bbox(frame_copy, 
+                                boxes,
+                                pred_labels, 
+                                scores, 
+                                self.ai_model.classes, 
+                                **CFG['visualization']['bbox'])
+                        
+                        # 畫左 devices
+                        plot_bbox(frame_copy, 
+                                self.device.left_bboxes,
+                                self.device.left_labels, 
+                                ([1.] * len(self.device.left_labels)), 
+                                self.ai_model.classes, 
+                                **CFG['visualization']['bbox'])
 
-                    # 畫右 devices
-                    plot_bbox(frame_copy, 
-                              self.device.right_bboxes,
-                              self.device.right_labels, 
-                              [1.] * len(self.device.right_labels), 
-                              self.ai_model.classes, 
-                              **CFG['visualization']['bbox'])
+                        # 畫右 devices
+                        plot_bbox(frame_copy, 
+                                self.device.right_bboxes,
+                                self.device.right_labels, 
+                                [1.] * len(self.device.right_labels), 
+                                self.ai_model.classes, 
+                                **CFG['visualization']['bbox'])
 
-                    # 畫時間戳
-                    now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
-                    draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
+                        # 畫時間戳
+                        now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
+                        draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
 
-                    # Push to Streamer
-                    self.streamer.push_frame(frame_copy) 
-                    self.video.write_frame(frame_copy)
+                    # push to streamer
+                    with streamer_timer:
+                        self.streamer.push_frame(frame_copy) 
 
-                # log
-                self.throttled_logger.log(f'[{loop_timer.name}] {loop_timer.elapsed:.3f} (s)', 'DEBUG')
+                    # write frame into video
+                    with video_timer:
+                        self.video.write_frame(frame_copy)
 
+                # log time elapsed
+                MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{read_frame_timer.name}] {read_frame_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{split_timer.name}] {split_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{ai_timer.name}] {ai_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{handwash_timer.name}] {handwash_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{draw_result_timer.name}] {draw_result_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{frame_copy_timer.name}] {frame_copy_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{streamer_timer.name}] {streamer_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{video_timer.name}] {video_timer.elapsed:.6f} (s)', 'DEBUG', reset=True)
+            
             pbar.close()
 
         except SystemExit:

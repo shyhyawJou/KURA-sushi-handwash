@@ -1,7 +1,7 @@
 import numpy as np
 from datetime import datetime
 from loguru import logger
-from .plot import plot_distance, plot_xy, plot_timeout, COLORS, DISTANCE_COLOR
+from .plot import plot_distance, plot_xy, plot_timeout, DISTANCE_COLOR
 
 
 
