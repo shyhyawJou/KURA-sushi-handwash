@@ -3,6 +3,7 @@ from pathlib import Path as p
 import cv2
 from time import time
 import onnxruntime as ort
+from collections.abc import Sequence, Iterable
 from loguru import logger
 
 try:
@@ -19,20 +20,14 @@ class RTMDet:
                  iou_thresh, 
                  input_wh, 
                  classes, 
-                 agnostic_nms=False, 
-                 agnostic_nms_classes=None):
+                 agnostic_nms=None):
         
         self.model = None
         self.input_wh = input_wh
         self.agnostic_nms = agnostic_nms
+        self.agnostic_nms_labels = self._create_agnostic_nms_labels(classes)
         self.score_thresh = score_thresh
-        self.iou_thresh = iou_thresh
-
-        if agnostic_nms_classes and len(agnostic_nms_classes) > 0:
-            self.agnostic_nms_labels = [[classes.index(cls) for cls in group] for group in agnostic_nms_classes]
-        else:
-            self.agnostic_nms_labels = None
-            
+        self.iou_thresh = iou_thresh            
         self.strides = [8, 16, 32]
         self.mean = np.asarray([103.53, 116.28, 123.675], 'float32')
         self.std = np.asarray([57.375, 57.12, 58.395], 'float32')
@@ -80,23 +75,20 @@ class RTMDet:
         boxes_nms = boxes.copy()
         boxes_nms[:, 2:4] -= boxes[:, 0:2]
 
-        if self.agnostic_nms:
-            ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
-        else:
-            # 分組無類別 NMS 的 labels
-            OFFSET_WH = 4096
-            adjusted_labels = pred_labels.copy()
+        # 分組無類別 NMS 的 labels
+        OFFSET_WH = 4096
+        adjusted_labels = pred_labels.copy()
+        
+        # 無類別 NMS
+        if self.agnostic_nms_labels:
+            for group in self.agnostic_nms_labels:
+                target_label = group[0]
+                mask = np.isin(adjusted_labels, group)
+                adjusted_labels[mask] = target_label
             
-            # 如果有指定哪些類別要「忽略標籤差異、共同競爭」
-            if self.agnostic_nms_labels:
-                for group in self.agnostic_nms_labels:
-                    target_cls = group[0]
-                    mask = np.isin(adjusted_labels, group)
-                    adjusted_labels[mask] = target_cls
-                
-            offset = (adjusted_labels * OFFSET_WH).astype('float32')
-            boxes_nms[:, 0] += offset
-            ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
+        offset = (adjusted_labels * OFFSET_WH).astype('float32')
+        boxes_nms[:, 0] += offset
+        ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
 
         if len(ids) > 0:
             scores, boxes, pred_labels = scores[ids], boxes[ids], pred_labels[ids]
@@ -155,11 +147,19 @@ class RTMDet:
             y = self._forward(x)
         t1 = time()
         logger.info(f'warmup: {t1 - t0:.3f} (s)')
+    
+    def _create_agnostic_nms_labels(self, classes):
+        if not self.agnostic_nms:
+            return None
 
+        assert isinstance(self.agnostic_nms, Sequence) and len(self.agnostic_nms) > 0
+        labels = [[classes.index(cls) for cls in group['class']] for group in self.agnostic_nms]
+        return labels
+    
 
 class RTMDet_ONNX(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False, agnostic_nms_classes=None):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms, agnostic_nms_classes)
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
 
     def _forward(self, x):
         y = self.model.run(None, {self.input_name: x})[0]
@@ -172,8 +172,8 @@ class RTMDet_ONNX(RTMDet):
 
 
 class RTMDet_TFLITE(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False, agnostic_nms_classes=None):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms, agnostic_nms_classes)
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
 
     def _forward(self, x):
         self.model.set_tensor(self.input_id, x)
@@ -189,8 +189,8 @@ class RTMDet_TFLITE(RTMDet):
 
 
 class RTMDet_DLA(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=False, agnostic_nms_classes=None):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms, agnostic_nms_classes)
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
 
     def _forward(self, x):
         y = self.model.run(x).reshape(1, -1, self.grids.shape[0])

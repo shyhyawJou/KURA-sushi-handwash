@@ -20,7 +20,6 @@ AI:
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
-        agnostic_nms: false
 
         classes:
             - 'palm to palm'
@@ -40,16 +39,22 @@ AI:
             - 'sink'
             - 'soap dispenser'
         
-        agnostic_nms_classes:  # null 或是 [] 是 disable
+        agnostic_nms:  # null 是 disable
             -
-                - 'palm to palm'
-                - 'palm over back'
-                - 'interlaced fingers'
-                - 'thumb or wrist scrub'
-                - 'scrub under nails'
-            -
-                - 'left'
-                - 'right'
+                class:
+                    - 'palm to palm'
+                    - 'palm over back'
+                    - 'interlaced fingers'
+                    - 'thumb or wrist scrub'
+                    - 'scrub under nails'
+                iou_thresh:
+                    0.1
+            #- 
+            #    class:
+            #        - 'left'
+            #        - 'right'
+            #    iou_thresh:
+            #        0.9
 
 device: 
     path: 'utils/device.yaml'
@@ -80,12 +85,12 @@ video:
 
 visualization:
     bbox:
-        omit_classes:
+        omit_classes: []
             #- 'left'
             #- 'right'
             #- 'gloved hand'
-            - 'alcohol nozzle'
-            - 'nail brush'
+            #- 'alcohol nozzle'
+            #- 'nail brush'
             #- 'paper towel'
             #- 'air outlet'
             #- 'brush tray'
@@ -109,14 +114,41 @@ visualization:
         num_block: 2
 
 logic:
-    trigger_buffer: 5           # 基礎緩衝幀數
-    scrub_verify_frames: 5      # 搓揉前驗證幀數
-    faucet_dist_thresh: 100      # 水龍頭附近判定距離 (px)
-    #soap_dist_thresh: 50       # 洗手液附近判定距離 (px)
-    soap_stay_frames: 2         # 洗手液停留幀數
-    alcohol_dist_thresh: 200    # 酒精噴灑判定距離 (px)
-    alcohol_trigger_frames: 5   # 酒精噴灑持續幀數
-    reset_time: 5               # 秒
+    parameter:
+        trigger_buffer: 5            # 基礎緩衝幀數
+        scrub_verify_frames: 5       # 搓揉前驗證幀數
+        faucet_dist_thresh: 50       # 水龍頭附近判定距離 (px)
+        soap_dist_thresh: 45         # 洗手液附近判定距離 (px)
+        air_outlet_dist_thresh: 100  # 殺菌燈附近判定距離 (px)
+        alcohol_dist_thresh: 200     # 酒精噴灑判定距離 (px)
+        alcohol_trigger_frames: 5    # 酒精噴灑持續幀數
+        no_hand_timeout: 1           # 秒
+        step_idle_timeout: 20        # 秒
+    
+    class:
+        hand:
+            - 'left'
+            - 'right'
+        gloved hand:
+            - 'gloved hand'
+        device:
+            - 'air outlet'
+            - 'brush tray'
+            - 'faucet'
+            - 'sink'
+            - 'soap dispenser'
+        handwash:
+            - 'palm to palm'
+            - 'palm over back'
+            - 'interlaced fingers'
+            - 'thumb or wrist scrub'
+            - 'scrub under nails'
+        nail brush:
+            - 'nail brush'
+        paper towel:
+            - 'paper towel'
+        alcohol nozzle:
+            - 'alcohol nozzle'
 
 udp:
     ip: '127.0.0.1'
