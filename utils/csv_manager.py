@@ -40,6 +40,8 @@ class Csv_Manager:
                 writer.writerow(self.headers)
             logger.info(f"Created new CSV file: {self.file_path}")
 
+        logger.info(f"today's record will be written to {self.file_path} !")
+
     def write_record(self, data_dict):
         # 規則 15: 檢查是否跨日，若是則更換檔案
         now_date = datetime.now().strftime('%Y%m%d')
