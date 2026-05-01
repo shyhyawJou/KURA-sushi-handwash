@@ -23,8 +23,9 @@ class Csv_Manager:
         self._init_csv()
 
     def _generate_path(self):
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return os.path.join(self.save_dir, f"{timestamp}.csv")
+        now = datetime.now().strftime('%Y%m%d_%H%M%S')
+        path = self._find_today_csv(now)
+        return path
 
     def _init_csv(self):
         self.headers = ["Store ID", "Start Time", "End Time"]
@@ -39,6 +40,8 @@ class Csv_Manager:
                 writer.writerow(self.headers)
             logger.info(f"Created new CSV file: {self.file_path}")
 
+        logger.info(f"today's record will be written to {self.file_path} !")
+
     def write_record(self, data_dict):
         # 規則 15: 檢查是否跨日，若是則更換檔案
         now_date = datetime.now().strftime('%Y%m%d')
@@ -52,3 +55,10 @@ class Csv_Manager:
             writer = csv.DictWriter(f, fieldnames=self.headers)
             writer.writerow(data_dict)
         logger.success(f"Successfully exported wash record to {self.file_path}")
+
+    def _find_today_csv(self, now: str):
+        """ 找到與今天相同日期的 csv """
+        for path in p(self.save_dir).glob('*.csv'):
+            if path.stem[:8] == now[:8]:
+                return path
+        return f'{self.save_dir}/{now}.csv'

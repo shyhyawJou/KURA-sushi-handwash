@@ -2,6 +2,7 @@ import os
 from time import time
 import sys
 from loguru import logger
+from .cfg import CFG
 
 
 
@@ -10,12 +11,16 @@ class Throttled_Logger:
         self.log_interval = log_interval
         self.last_log_time = 0.0
 
-    def log(self, msg, level):
+    def log(self, msg, level, reset=True):
         current = time()
         # check
         if current - self.last_log_time >= self.log_interval:
             logger.opt(depth=1).log(level, f"{msg}")
-            self.last_log_time = current
+            if reset:
+                self.last_log_time = current
+
+
+MY_LOGGER = Throttled_Logger(**CFG['throttled_logger'])
 
 
 def setup_logger(level="INFO", folder="logs", suffix=None):

@@ -62,7 +62,7 @@ log:
     level: DEBUG
 
 throttled_logger:
-    log_interval: 10
+    log_interval: 60
 
 csv:
     save_dir: '/mnt/reserved/csv'
