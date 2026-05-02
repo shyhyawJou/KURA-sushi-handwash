@@ -57,6 +57,36 @@ def get_device_total_gb(dev_path):
     return 0
 
 
+def fix_readonly_device(dev_path, mount_point):
+    """
+    處理唯讀問題：解除掛載、執行修復、重新掛載
+    """
+    logger.warning(f"Attempting to fix read-only device: {dev_path}")
+    try:
+        # 1. 解除掛載
+        subprocess.run(["sudo", "umount", "-l", mount_point], check=False)
+        
+        # 2. 根據檔案系統類型執行修復 (針對 exfat 使用 fsck.exfat)
+        # -p: 自動修復, -y: 遇到問題一律回答 yes
+        logger.info(f"Running fsck on {dev_path}...")
+        repair_cmd = ["sudo", "fsck.exfat", "-p", dev_path]
+        result = subprocess.run(repair_cmd, capture_output=True, text=True)
+        
+        if result.returncode <= 1: # 0 或 1 通常代表成功或已修正
+            logger.success(f"Repair successful on {dev_path}")
+        else:
+            logger.error(f"Repair failed: {result.stderr}")
+            return False
+
+        # 3. 重新掛載
+        subprocess.run(["sudo", "mount", "-o", "rw", dev_path, mount_point], check=True)
+        logger.success(f"Successfully remounted {dev_path} as RW")
+        return True
+    except Exception as e:
+        logger.error(f"Self-healing failed: {e}")
+        return False
+
+
 def check_and_mount():
     """
     1. 檢查 /dev 下的 USB 分區數量
@@ -86,6 +116,8 @@ def check_and_mount():
 
     # 檢查該裝置是否已經掛載在任何地方
     current_mount_point = ""
+    is_readonly = False
+
     try:
         with open('/proc/mounts', 'r') as f:
             for line in f:
@@ -93,31 +125,40 @@ def check_and_mount():
                 # parts[0] 是裝置名, parts[1] 是掛載路徑
                 if parts[0] == target_dev:
                     current_mount_point = parts[1]
+                    # 檢查掛載參數中是否包含 'ro'
+                    if 'ro' in parts[3].split(','):
+                        is_readonly = True
                     break
     except Exception as e:
         logger.error(f"Failed to read /proc/mounts: {e}")
         return ""
 
-    # 如果已經掛載，直接回傳位置
-    if current_mount_point:
-        # logger.debug(f"Device {target_dev} already mounted at {current_mount_point}")
-        return current_mount_point
+    # 如果發現唯讀，執行修復機制
+    if is_readonly and current_mount_point:
+        logger.error(f"Device {target_dev} is READ-ONLY!")
+        if fix_readonly_device(target_dev, current_mount_point):
+            return current_mount_point
+        else:
+            return ""
 
     # 如果沒掛載，嘗試掛載到指定的 DEFAULT_MOUNT
-    logger.info(f"Detected unique USB {target_dev}. Attempting to mount to {DEFAULT_MOUNT}...")
-    
-    if not os.path.exists(DEFAULT_MOUNT):
-        os.makedirs(DEFAULT_MOUNT)
+    if not current_mount_point:
+        logger.info(f"Detected unique USB {target_dev}. Attempting to mount to {DEFAULT_MOUNT}...")
+        
+        if not os.path.exists(DEFAULT_MOUNT):
+            os.makedirs(DEFAULT_MOUNT)
 
-    try:
-        # 執行掛載指令
-        subprocess.run(["sudo", "mount", target_dev, DEFAULT_MOUNT], check=True, capture_output=True)
-        logger.success(f"Successfully mounted {target_dev} to {DEFAULT_MOUNT}")
-        return DEFAULT_MOUNT
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Mount failed for {target_dev}: {e.stderr.decode().strip()}")
-        return ""
-    
+        try:
+            # 執行掛載指令
+            subprocess.run(["sudo", "mount", "-o", "rw", target_dev, DEFAULT_MOUNT], check=True, capture_output=True)
+            logger.success(f"Successfully mounted {target_dev} to {DEFAULT_MOUNT}")
+            return DEFAULT_MOUNT
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Mount failed for {target_dev}: {e.stderr.decode().strip()}")
+            return ""
+
+    return current_mount_point
+
 
 def sync_files():
     global CURRENT_MOUNT
