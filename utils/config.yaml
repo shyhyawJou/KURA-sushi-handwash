@@ -131,8 +131,8 @@ logic:
         air_outlet_dist_thresh: 100  # 殺菌燈附近判定距離 (px)
         alcohol_dist_thresh: 200     # 酒精噴灑判定距離 (px)
         alcohol_trigger_frames: 5    # 酒精噴灑持續幀數
-        no_hand_timeout: 1           # 秒
-        step_idle_timeout: 20        # 秒
+        no_hand_timeout: 5           # 秒
+        step_idle_timeout: 30        # 秒
     
     class:
         hand:
