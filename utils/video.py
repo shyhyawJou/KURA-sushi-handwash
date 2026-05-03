@@ -19,15 +19,17 @@ class Video:
                  frame_h, 
                  fps, 
                  periods, 
-                 bitrate=3, 
+                 bitrate=3,
+                 gop=60,
                  suffix='', 
                  enable=True, 
                  output_path=None):
         
         self.is_enable = enable
         if not self.is_enable:
-            logger.warning('錄影被設定成 "不啟動" !')
-
+            logger.warning(f'suffix 是 "{suffix}" 的錄影被設定成 "不啟動" !')
+            return
+        
         self.base_dir = base_dir
         self.date = None
         self.hour = None
@@ -42,6 +44,7 @@ class Video:
         self.frame_w = frame_w
         self.frame_h = frame_h
         self.fps = fps
+        self.gop = gop
         self.bitrate = bitrate
         self.suffix = suffix
         self.num_write = 0
@@ -214,7 +217,7 @@ class Video:
                     logger.error(traceback.format_exc())
 
             period = self.working_hours[self.period_idx]
-            logger.info(f'現在是錄影時段: {min(period)}點 ~ {max(period)}點')
+            logger.info(f'現在是錄影時段: {min(period)}點 ~ {max(period) + 1}點')
 
     def _make_working_hour(self, periods):
         working_hours = []

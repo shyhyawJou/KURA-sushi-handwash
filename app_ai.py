@@ -36,13 +36,14 @@ class App_HandWash:
         self.is_running = False
 
         CFG['camera']['video_path'] = VIDEO_PATH  # 要讀取的影片
-        CFG['video']['output_path'] = VIDEO_PATH  # 利用檔名產生輸出檔案
+        CFG['video']['origin']['output_path'] = VIDEO_PATH  # 利用檔名產生輸出檔案
         CFG['csv']['output_path'] = VIDEO_PATH.with_suffix('.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
         self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.ai_model = RTMDet_ONNX(**CFG['AI']['handwash'])
-        self.video = Video(**CFG['video'])
+        self.origin_video = Video(**CFG['video']['origin'])
+        self.result_video = Video(**CFG['video']['result'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.result_drawer = Result(**CFG['visualization']['result'])
         self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
@@ -174,7 +175,8 @@ class App_HandWash:
 
                     # write frame into video
                     with video_timer:
-                        self.video.write_frame(frame_copy)
+                        self.origin_video.write_frame(frame)
+                        self.result_video.write_frame(frame_copy)
 
                 # log time elapsed
                 MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
@@ -207,7 +209,8 @@ class App_HandWash:
         
         self.camera.stop()
         self.streamer.stop()
-        self.video.stop()
+        self.origin_video.stop()
+        self.result_video.stop()
 
         logger.success("Program exited safely.")
         sys.exit(0)

@@ -71,26 +71,44 @@ csv:
     output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
 
 video:
-    enable: true  # 要不要啟動錄影
-    base_dir: log/record/stream
-    frame_w: 640
-    frame_h: 480
-    fps: 30
-    periods: [
-        [0, 24]
-    ]
-    bitrate: 3
-    suffix: ''
-    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+    # 原始影片
+    origin: 
+        enable: true  # 要不要啟動錄影 (不管其他參數)
+        base_dir: log/record/stream
+        frame_w: 640
+        frame_h: 480
+        fps: 30
+        gop: 60
+        periods: [
+            [0, 24]
+        ]
+        bitrate: 2
+        suffix: ''
+        output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+
+    # 結果影片
+    result:
+        enable: false  # 要不要啟動錄影 (不管其他參數)
+        base_dir: log/record/stream
+        frame_w: 640
+        frame_h: 480
+        fps: 30
+        gop: 60
+        periods: [
+            [0, 24]
+        ]
+        bitrate: 1.5
+        suffix: '_result'
+        output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
 
 visualization:
     bbox:
-        omit_classes: []
+        omit_classes:
             #- 'left'
             #- 'right'
             #- 'gloved hand'
-            #- 'alcohol nozzle'
-            #- 'nail brush'
+            - 'alcohol nozzle'
+            - 'nail brush'
             #- 'paper towel'
             #- 'air outlet'
             #- 'brush tray'
