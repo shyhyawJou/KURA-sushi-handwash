@@ -69,28 +69,57 @@ csv:
     output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
 
 video:
-    enable: true  # 要不要啟動錄影
-    base_dir: /mnt/reserved/record/stream
-    frame_w: 640
-    frame_h: 480
-    fps: 30
-    periods: [
-        [9, 10],
-        [10, 11],
-        [11, 12],
-        [12, 13],
-        [13, 14],
-        [14, 15],
-        [15, 16],
-        [16, 17],
-        [17, 18],
-        [18, 19],
-        [19, 20],
-        [20, 21]
-    ]
-    bitrate: 3
-    suffix: ''
-    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+    # 原始影片
+    origin: 
+        enable: true  # 要不要啟動錄影 (不管其他參數)
+        base_dir: /mnt/reserved/record/stream
+        frame_w: 640
+        frame_h: 480
+        fps: 30
+        gop: 60
+        periods: [
+            [9, 10],
+            [10, 11],
+            [11, 12],
+            [12, 13],
+            [13, 14],
+            [14, 15],
+            [15, 16],
+            [16, 17],
+            [17, 18],
+            [18, 19],
+            [19, 20],
+            [20, 21]
+        ]
+        bitrate: 2
+        suffix: ''
+        output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+
+    # 結果影片
+    result:
+        enable: true  # 要不要啟動錄影 (不管其他參數)
+        base_dir: /mnt/reserved/record/stream
+        frame_w: 640
+        frame_h: 480
+        fps: 30
+        gop: 60
+        periods: [
+            [9, 10],
+            [10, 11],
+            [11, 12],
+            [12, 13],
+            [13, 14],
+            [14, 15],
+            [15, 16],
+            [16, 17],
+            [17, 18],
+            [18, 19],
+            [19, 20],
+            [20, 21]
+        ]
+        bitrate: 1.5
+        suffix: '_result'
+        output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
 
 visualization:
     bbox:

@@ -19,7 +19,8 @@ class Video:
                  frame_h, 
                  fps, 
                  periods, 
-                 bitrate=3, 
+                 bitrate=3,
+                 gop=60,
                  suffix='', 
                  enable=True, 
                  output_path=None):
@@ -42,6 +43,7 @@ class Video:
         self.frame_w = frame_w
         self.frame_h = frame_h
         self.fps = fps
+        self.gop = gop
         self.bitrate = bitrate
         self.suffix = suffix
         self.num_write = 0
@@ -214,7 +216,7 @@ class Video:
                     logger.error(traceback.format_exc())
 
             period = self.working_hours[self.period_idx]
-            logger.info(f'現在是錄影時段: {min(period)}點 ~ {max(period)}點')
+            logger.info(f'現在是錄影時段: {min(period)}點 ~ {max(period) + 1}點')
 
     def _make_working_hour(self, periods):
         working_hours = []
@@ -237,7 +239,7 @@ class Video:
     def _init_video_writer(self):
         pipeline = (
             f'appsrc ! videoconvert ! '
-            f'v4l2h264enc extra-controls="encode,video_bitrate={self.bitrate}000000,video_gop_size={self.fps}" ! '
+            f'v4l2h264enc extra-controls="encode,video_bitrate={self.bitrate}000000,video_gop_size={self.gop}" ! '
             f'h264parse ! mp4mux ! filesink location={self.video_path} sync=false'
         )
 
