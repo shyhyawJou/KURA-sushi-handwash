@@ -27,8 +27,9 @@ class Video:
         
         self.is_enable = enable
         if not self.is_enable:
-            logger.warning('錄影被設定成 "不啟動" !')
-
+            logger.warning(f'suffix 是 "{suffix}" 的錄影被設定成 "不啟動" !')
+            return
+        
         self.base_dir = base_dir
         self.date = None
         self.hour = None
