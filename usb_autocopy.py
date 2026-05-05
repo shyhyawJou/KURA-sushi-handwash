@@ -222,7 +222,7 @@ def sync_files():
         return
 
     # 找出所有影片檔（假設副檔名為 .mp4，可自行修改）
-    for mark_path in p(SOURCE_DIR).glob('**/*.txt'):
+    for mark_path in list(p(SOURCE_DIR).glob('**/*.txt')):
         # 目標位置
         video_path = mark_path.with_suffix('.mp4')
 
