@@ -123,12 +123,12 @@ video:
 
 visualization:
     bbox:
-        omit_classes:
+        omit_classes: []
             #- 'left'
             #- 'right'
             #- 'gloved hand'
-            - 'alcohol nozzle'
-            - 'nail brush'
+            #- 'alcohol nozzle'
+            #- 'nail brush'
             #- 'paper towel'
             #- 'air outlet'
             #- 'brush tray'
