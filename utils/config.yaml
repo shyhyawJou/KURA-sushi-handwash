@@ -102,7 +102,7 @@ video:
         frame_w: 640
         frame_h: 480
         fps: 30
-        gop: 60
+        gop: 120
         periods: [
             [9, 10],
             [10, 11],

@@ -21,7 +21,11 @@ LOG_PATH = "/mnt/reserved/usb_autocopy.log"  # LOG 路徑
 DELETE_OLD = True
 DELETE_FAILED = True
 TARGET_TOTAL_GB = 10                         # USB 總空間必須大於此數值才會被視為可能的 MOUNT POINT
+RELOG_TIMEOUT = 3600                         # 重新等待印出連續的錯誤訊息 (秒)
+MAX_ERROR = 50                               # 最大連續發生錯誤次數
 
+# 
+ERROR_COUNT = 0
 
 
 def setup_logger():
@@ -59,31 +63,54 @@ def get_device_total_gb(dev_path):
 
 def fix_readonly_device(dev_path, mount_point):
     """
-    處理唯讀問題：解除掛載、執行修復、重新掛載
+    處理掛載失敗或唯讀問題：解除掛載、偵測格式、執行強力修復、重新掛載
     """
-    logger.warning(f"Attempting to fix read-only device: {dev_path}")
+    logger.warning(f"Attempting to fix device: {dev_path}")
     try:
-        # 1. 解除掛載
+        # 1. 強制解除掛載 (確保乾淨)
         subprocess.run(["sudo", "umount", "-l", mount_point], check=False)
-        
-        # 2. 根據檔案系統類型執行修復 (針對 exfat 使用 fsck.exfat)
-        # -p: 自動修復, -y: 遇到問題一律回答 yes
-        logger.info(f"Running fsck on {dev_path}...")
-        repair_cmd = ["sudo", "fsck.exfat", "-p", dev_path]
+        subprocess.run(["sudo", "umount", "-l", dev_path], check=False)
+
+        # 2. 偵測檔案系統格式 (重要：避免用錯工具)
+        fs_type = ""
+        try:
+            blkid_out = subprocess.check_output(["sudo", "blkid", "-o", "value", "-s", "TYPE", dev_path], text=True).strip()
+            fs_type = blkid_out.lower()
+        except:
+            logger.error(f"Cannot detect filesystem type for {dev_path}")
+
+        # 3. 根據格式執行修復[cite: 1]
+        if "exfat" in fs_type:
+            # -y 比 -p 更強力，強制回答 yes 修復所有錯誤[cite: 1]
+            repair_cmd = ["sudo", "fsck.exfat", "-y", dev_path]
+        elif "ntfs" in fs_type:
+            # NTFS 隨身碟常見問題修復工具
+            repair_cmd = ["sudo", "ntfsfix", "-d", dev_path]
+        else:
+            # 通用修復嘗試
+            repair_cmd = ["sudo", "fsck", "-y", dev_path]
+
+        logger.info(f"Running repair ({fs_type}) on {dev_path}...")
         result = subprocess.run(repair_cmd, capture_output=True, text=True)
         
-        if result.returncode <= 1: # 0 或 1 通常代表成功或已修正
-            logger.success(f"Repair successful on {dev_path}")
-        else:
-            logger.error(f"Repair failed: {result.stderr}")
-            return False
+        # 輸出具體修復訊息，方便除錯
+        if result.stdout: logger.info(f"Repair Info: {result.stdout.strip()}")
 
-        # 3. 重新掛載
-        subprocess.run(["sudo", "mount", "-o", "rw", dev_path, mount_point], check=True)
-        logger.success(f"Successfully remounted {dev_path} as RW")
+        # 4. 重新掛載[cite: 1]
+        # 增加 -t 參數明確指定格式有助於解決 "wrong fs type" 報錯
+        mount_cmd = ["sudo", "mount", "-o", "rw", dev_path, mount_point]
+        if fs_type:
+            mount_cmd = ["sudo", "mount", "-t", fs_type, "-o", "rw", dev_path, mount_point]
+            
+        subprocess.run(mount_cmd, check=True, capture_output=True)
+        logger.success(f"Successfully fixed and mounted {dev_path} to {mount_point}[cite: 1]")
         return True
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Mount/Repair command failed: {e.stderr.decode().strip()}")
+        return False
     except Exception as e:
-        logger.error(f"Self-healing failed: {e}")
+        logger.error(f"Self-healing critical failure: {e}")
         return False
 
 
@@ -94,7 +121,7 @@ def check_and_mount():
     3. 若過濾後唯一，確認其掛載狀態並處理
     4. 回傳掛載路徑或空字串
     """
-    # 搜尋所有 sd[b-z] 的分區 (例如 sdb1, sdc1...)，排除系統碟 sda
+    # 搜尋所有 sd[a-z] 的分區 (確保包含 sda1, sdb1...)
     all_usb_devices = glob.glob("/dev/sd[a-z][1-9]")
 
     # 立即檢查大小 ---
@@ -112,18 +139,24 @@ def check_and_mount():
             logger.error(f"Multiple USB devices detected: {usb_devices}. Ambigious target!")
         return ""
 
-    target_dev = usb_devices[0] # 唯一的 USB 裝置路徑
+    # 取得唯一的 USB 裝置路徑，並轉換為實體路徑 (處理 /dev/sda1 vs /dev/root 等問題)
+    target_dev_path = os.path.realpath(usb_devices[0]) 
 
-    # 檢查該裝置是否已經掛載在任何地方
     current_mount_point = ""
     is_readonly = False
+    found_in_mounts = False
 
     try:
         with open('/proc/mounts', 'r') as f:
             for line in f:
                 parts = line.split()
-                # parts[0] 是裝置名, parts[1] 是掛載路徑
-                if parts[0] == target_dev:
+                if not parts: continue
+                
+                # 同樣將 /proc/mounts 裡的裝置名稱轉為實體路徑再比對
+                mount_dev_path = os.path.realpath(parts[0])
+                
+                if mount_dev_path == target_dev_path:
+                    found_in_mounts = True
                     current_mount_point = parts[1]
                     # 檢查掛載參數中是否包含 'ro'
                     if 'ro' in parts[3].split(','):
@@ -133,30 +166,42 @@ def check_and_mount():
         logger.error(f"Failed to read /proc/mounts: {e}")
         return ""
 
-    # 如果發現唯讀，執行修復機制
-    if is_readonly and current_mount_point:
-        logger.error(f"Device {target_dev} is READ-ONLY!")
-        if fix_readonly_device(target_dev, current_mount_point):
+    # 情況 A: 裝置已掛載，但為唯讀
+    if found_in_mounts and is_readonly:
+        logger.error(f"Device {target_dev_path} is READ-ONLY! Attempting repair...")
+        if fix_readonly_device(target_dev_path, current_mount_point):
             return current_mount_point
         else:
             return ""
 
-    # 如果沒掛載，嘗試掛載到指定的 DEFAULT_MOUNT
-    if not current_mount_point:
-        logger.info(f"Detected unique USB {target_dev}. Attempting to mount to {DEFAULT_MOUNT}...")
+    # 情況 B: 裝置完全沒掛載 (lsblk 有但 /proc/mounts 沒有)
+    if not found_in_mounts:
+        logger.info(f"Detected unique USB {target_dev_path} (Not mounted). Attempting to mount to {DEFAULT_MOUNT}...")
         
         if not os.path.exists(DEFAULT_MOUNT):
             os.makedirs(DEFAULT_MOUNT)
 
         try:
-            # 執行掛載指令
-            subprocess.run(["sudo", "mount", "-o", "rw", target_dev, DEFAULT_MOUNT], check=True, capture_output=True)
-            logger.success(f"Successfully mounted {target_dev} to {DEFAULT_MOUNT}")
+            # 執行掛載指令，明確指定 rw
+            subprocess.run(["sudo", "mount", "-o", "rw", target_dev_path, DEFAULT_MOUNT], check=True, capture_output=True)
+            logger.success(f"Successfully mounted {target_dev_path} to {DEFAULT_MOUNT}")
             return DEFAULT_MOUNT
         except subprocess.CalledProcessError as e:
-            logger.error(f"Mount failed for {target_dev}: {e.stderr.decode().strip()}")
+            error_msg = e.stderr.decode().strip()
+            logger.error(f"First mount attempt failed: {error_msg}")
+
+            # --- 自我修復機制啟動 ---
+            # 如果報錯包含 "wrong fs type" 或 "bad superblock"，嘗試修復
+            if "wrong fs type" in error_msg or "bad superblock" in error_msg:
+                logger.warning(f"Possible filesystem corruption detected on {target_dev_path}. Running fix...")
+                
+                # fsck.exfat 或 ntfsfix
+                if fix_readonly_device(target_dev_path, DEFAULT_MOUNT):
+                    return DEFAULT_MOUNT            
+            
             return ""
 
+    # 情況 C: 裝置已掛載且狀態正常 (RW)
     return current_mount_point
 
 
@@ -180,10 +225,9 @@ def sync_files():
     for mark_path in p(SOURCE_DIR).glob('**/*.txt'):
         # 目標位置
         video_path = mark_path.with_suffix('.mp4')
-        video_dst = f'{CURRENT_MOUNT}/{"/".join(video_path.parts[-2:])}'
 
         # 跳過
-        if not exists(video_path) or exists(video_dst):
+        if not exists(video_path):
             continue
 
         # 執行複製

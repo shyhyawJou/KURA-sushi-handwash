@@ -240,7 +240,7 @@ class Video:
     def _init_video_writer(self):
         pipeline = (
             f'appsrc ! videoconvert ! '
-            f'v4l2h264enc extra-controls="encode,video_bitrate={self.bitrate}000000,video_gop_size={self.gop}" ! '
+            f'v4l2h264enc extra-controls="encode,video_bitrate={int(self.bitrate * 1e6)},video_gop_size={self.gop}" ! '
             f'h264parse ! mp4mux ! filesink location={self.video_path} sync=false'
         )
 
