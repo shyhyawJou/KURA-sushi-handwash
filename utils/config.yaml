@@ -93,7 +93,7 @@ video:
         frame_w: 640
         frame_h: 480
         fps: 30
-        gop: 60
+        gop: 120
         periods: [
             [0, 24]
         ]
