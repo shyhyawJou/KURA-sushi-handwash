@@ -73,8 +73,12 @@ class App_HandWash:
             video_timer = Timer('write frame to video', silent=True)
 
             logger.info("Main loop started.")
+        except:
+            logger.error(f"{traceback.format_exc()}")
 
-            while self.is_running:
+        # loop
+        while self.is_running:
+            try:
                 with loop_timer:
                     # read frame
                     with read_frame_timer:
@@ -176,15 +180,16 @@ class App_HandWash:
                 MY_LOGGER.log(f'[{streamer_timer.name}] {streamer_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{video_timer.name}] {video_timer.elapsed:.6f} (s)', 'DEBUG', reset=True)
 
-        except SystemExit:
-            logger.success('System exit !')
-        except:
-            logger.error(f"Main process crashed: {traceback.format_exc()}")
-        finally:
-            self.stop()
+            except:
+                logger.error(f"{traceback.format_exc()}")
 
     def handle_exit(self, signum, frame):
-        logger.warning(f"Received signal {signum}, shutting down...")
+        if signum == signal.SIGTERM:
+            logger.warning('received "SIGTERM", system will shut down or reboot !')
+        elif signum == signal.SIGINT:
+            logger.warning('received "SIGINT", program will stop !')
+        else:
+            logger.warning(f'received {signum} signal !')
         self.stop()
 
     def stop(self):
@@ -197,8 +202,7 @@ class App_HandWash:
         self.origin_video.stop()
         self.result_video.stop()
 
-        logger.success("Program exited safely.")
-        sys.exit(0)
+        logger.success("release all sources !")
 
 
 
@@ -207,7 +211,7 @@ if __name__ == "__main__":
         device_code = socket.gethostname().split('-')[-1]
         app = App_HandWash(device_code)
         app.run()
-    except SystemExit:
-        logger.success('Application terminated.')
     except:
         logger.error(traceback.format_exc())
+    finally:
+        logger.success('Application terminated !')
