@@ -80,8 +80,12 @@ class App_HandWash:
 
             # 進度條
             pbar = tqdm(unit='frame', desc='Processing')
+        except:
+            logger.error(f"{traceback.format_exc()}")
 
-            while self.is_running:
+        # loop
+        while self.is_running:
+            try:
                 with loop_timer:
                     # read frame
                     with read_frame_timer:
@@ -136,7 +140,7 @@ class App_HandWash:
                     # visualization
                     with draw_result_timer:
                         current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
-                                         f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
+                                        f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
                         self.result_drawer.draw_step(frame_copy, current_steps)
                         #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
                         #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
@@ -188,18 +192,19 @@ class App_HandWash:
                 MY_LOGGER.log(f'[{frame_copy_timer.name}] {frame_copy_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{streamer_timer.name}] {streamer_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{video_timer.name}] {video_timer.elapsed:.6f} (s)', 'DEBUG', reset=True)
-            
-            pbar.close()
 
-        except SystemExit:
-            logger.success('System exit !')
-        except:
-            logger.error(f"Main process crashed: {traceback.format_exc()}")
-        finally:
-            self.stop()
+            except:
+                logger.error(f"{traceback.format_exc()}")
+
+        pbar.close()
 
     def handle_exit(self, signum, frame):
-        logger.warning(f"Received signal {signum}, shutting down...")
+        if signum == signal.SIGTERM:
+            logger.warning('received "SIGTERM", system will shut down or reboot !')
+        elif signum == signal.SIGINT:
+            logger.warning('received "SIGINT", program will stop !')
+        else:
+            logger.warning(f'received {signum} signal !')
         self.stop()
 
     def stop(self):
@@ -212,8 +217,7 @@ class App_HandWash:
         self.origin_video.stop()
         self.result_video.stop()
 
-        logger.success("Program exited safely.")
-        sys.exit(0)
+        logger.success("release all sources !")
 
 
 def get_sort_key(path_obj):
@@ -253,17 +257,17 @@ def get_sort_key(path_obj):
 
 
 if __name__ == "__main__":
-    paths = sorted(p('video').glob('**/*.mp4'), key=get_sort_key)
-    for path in paths:
-        if path.name != '20260410_1.mp4':
-            continue
+    try:
+        paths = sorted(p('video').glob('**/*.mp4'), key=get_sort_key)
+        for path in paths:
+            if path.name != '20260410_1.mp4':
+                continue
 
-        try:
             VIDEO_PATH = path
             device_code = socket.gethostname().split('-')[-1]
             app = App_HandWash(device_code)
             app.run()
-        except SystemExit:
-            logger.success('Application terminated.')
-        except:
-            logger.error(traceback.format_exc())
+    except:
+        logger.error(traceback.format_exc())
+    finally:
+        logger.success('Application terminated !')
