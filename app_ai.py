@@ -129,11 +129,11 @@ class App_HandWash:
 
                     # 洗手檢測
                     with handwash_timer:
-                        now, res_l = self.tracker_left.update(left_dets, frame_copy)
+                        now, res_l = self.tracker_left.update_step_by_step(left_dets, frame_copy)
                         if res_l: 
                             self.csv_manager.write_record(res_l)
 
-                        now, res_r = self.tracker_right.update(right_dets, frame_copy)
+                        now, res_r = self.tracker_right.update_step_by_step(right_dets, frame_copy)
                         if res_r: 
                             self.csv_manager.write_record(res_r)
 

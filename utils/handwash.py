@@ -27,8 +27,10 @@ class HandWashTracker:
 
         self.reset()
 
-    #def update(self, detections):
     def update(self, detections, img):
+        pass
+    
+    def update_step_by_step(self, detections, img):
         # 分組
         hands = detections['box'][np.isin(detections['label'], self.logic_labels['hand'])]
         gloved_hands = detections['box'][np.isin(detections['label'], self.logic_labels['gloved hand'])]
