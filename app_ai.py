@@ -19,7 +19,7 @@ from utils import (Mjpeg_Streamer,
                    setup_logger, MY_LOGGER,
                    Csv_Manager,
                    HandWashTracker,
-                   draw_timestamp,
+                   draw_timestamp, draw_status_overlay, draw_debug_panel,
                    Device,
                    Result,
                    Timer,
@@ -46,12 +46,17 @@ class App_HandWash:
         self.result_video = Video(**CFG['video']['result'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.result_drawer = Result(**CFG['visualization']['result'])
-        self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
+        #self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
+        self.device = None
 
         # 檢測洗手
-        self.tracker_left = HandWashTracker(zone_name="Left", devices=self.device.left_data,
+        #self.tracker_left = HandWashTracker(zone_name="Left", devices=self.device.left_data,
+        #                                    ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
+        #self.tracker_right = HandWashTracker(zone_name="Right", devices=self.device.right_data, 
+        #                                     ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
+        self.tracker_left = HandWashTracker(zone_name="Left", devices=None,
                                             ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
-        self.tracker_right = HandWashTracker(zone_name="Right", devices=self.device.right_data, 
+        self.tracker_right = HandWashTracker(zone_name="Right", devices=None, 
                                              ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
 
         signal.signal(signal.SIGINT, self.handle_exit)
@@ -129,49 +134,52 @@ class App_HandWash:
 
                     # 洗手檢測
                     with handwash_timer:
-                        now, res_l = self.tracker_left.update_step_by_step(left_dets, frame_copy)
+                        now, res_l = self.tracker_left.update(left_dets, frame_copy)
                         if res_l: 
                             self.csv_manager.write_record(res_l)
 
-                        now, res_r = self.tracker_right.update_step_by_step(right_dets, frame_copy)
+                        now, res_r = self.tracker_right.update(right_dets, frame_copy)
                         if res_r: 
                             self.csv_manager.write_record(res_r)
 
                     # visualization
                     with draw_result_timer:
-                        current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
-                                        f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
-                        self.result_drawer.draw_step(frame_copy, current_steps)
+                        #current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
+                        #                 f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
+                        #self.result_drawer.draw_step(frame_copy, current_steps)
                         #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
                         #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
 
                         # 畫 detections
                         plot_bbox(frame_copy, 
-                                boxes,
-                                pred_labels, 
-                                scores, 
-                                self.ai_model.classes, 
-                                **CFG['visualization']['bbox'])
+                                  boxes,
+                                  pred_labels, 
+                                  scores, 
+                                  self.ai_model.classes, 
+                                  **CFG['visualization']['bbox'])
                         
-                        # 畫左 devices
-                        plot_bbox(frame_copy, 
-                                self.device.left_bboxes,
-                                self.device.left_labels, 
-                                ([1.] * len(self.device.left_labels)), 
-                                self.ai_model.classes, 
-                                **CFG['visualization']['bbox'])
-
-                        # 畫右 devices
-                        plot_bbox(frame_copy, 
-                                self.device.right_bboxes,
-                                self.device.right_labels, 
-                                [1.] * len(self.device.right_labels), 
-                                self.ai_model.classes, 
-                                **CFG['visualization']['bbox'])
+                        ## 畫左 devices
+                        #plot_bbox(frame_copy, 
+                        #          self.device.left_bboxes,
+                        #          self.device.left_labels, 
+                        #          ([1.] * len(self.device.left_labels)), 
+                        #          self.ai_model.classes, 
+                        #          **CFG['visualization']['bbox'])
+#
+                        ## 畫右 devices
+                        #plot_bbox(frame_copy, 
+                        #          self.device.right_bboxes,
+                        #          self.device.right_labels, 
+                        #          [1.] * len(self.device.right_labels), 
+                        #          self.ai_model.classes, 
+                        #          **CFG['visualization']['bbox'])
 
                         # 畫時間戳
                         now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
                         draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
+
+                        #
+                        draw_debug_panel(frame_copy, self.tracker_left, self.tracker_right)
 
                     # push to streamer
                     with streamer_timer:

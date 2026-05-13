@@ -250,3 +250,154 @@ def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offse
     # 2. 畫主文字 (紅色 BGR: 0, 0, 255)
     cv2.putText(img, timestamp_str, (x, y), 
                 font, font_scale, (0, 0, 255), thickness)
+    
+
+def draw_status_overlay(img, tracker_left, tracker_right):
+    """
+    在畫面左上與右上分別繪製 Left/Right 區域的當前步驟與 Count (綠色文字 + 黑色陰影)
+    """
+    h, w = img.shape[:2]
+    
+    def draw_text_with_shadow(image, text, org, font_scale=0.8, color=(0, 255, 0), thickness=2):
+        # 繪製黑色陰影 (偏移 2 像素)
+        cv2.putText(image, text, (org[0] + 2, org[1] + 2), cv2.FONT_HERSHEY_SIMPLEX, 
+                    font_scale, (0, 0, 0), thickness + 1, cv2.LINE_AA)
+        # 繪製綠色主文字
+        cv2.putText(image, text, org, cv2.FONT_HERSHEY_SIMPLEX, 
+                    font_scale, color, thickness, cv2.LINE_AA)
+
+    def get_info(tracker):
+        curr_step = tracker.step_sequence[-1] if tracker.step_sequence else "None"
+        last_count = 0
+        if isinstance(curr_step, int) and 3 <= curr_step <= 7:
+            last_count = tracker.counts[curr_step-1]
+        return f"Step: {curr_step}", f"Count: {last_count}"
+
+    # 左側資訊
+    s_l, c_l = get_info(tracker_left)
+    draw_text_with_shadow(img, f"[LEFT] {s_l}", (20, 50))
+    draw_text_with_shadow(img, f"       {c_l}", (20, 85))
+
+    # 右側資訊
+    s_r, c_r = get_info(tracker_right)
+    draw_text_with_shadow(img, f"[RIGHT] {s_r}", (w - 280, 50))
+    draw_text_with_shadow(img, f"        {c_r}", (w - 280, 85))
+
+
+def hex_to_rgb(hex_str):
+    hex_str = hex_str.lstrip('#').strip()
+    b = int(hex_str[0:2], 16)
+    g = int(hex_str[2:4], 16)
+    r = int(hex_str[4:6], 16)
+    return b, g, r
+
+
+def draw_debug_panel(img, tracker_l, tracker_r):
+    """
+    在畫面底部繪製雙手的洗手步驟監控面板
+    """
+    h, w = img.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    
+    # --- 參數配置 ---
+    font_size = 0.31     # 緊湊字體
+    line_height = 12     # 緊湊行高
+    panel_height = 175   # 面板總高度 (從底部往上算)
+    text_start_x_offset = 20
+    
+    def draw_text_with_shadow(image, text, org, color=(255, 255, 255), size=0.31, thickness=1):
+        # 繪製黑色陰影
+        cv2.putText(image, text, (org[0] + 1, org[1] + 1), font, size, (0, 0, 0), thickness + 1, cv2.LINE_AA)
+        # 繪製主文字
+        cv2.putText(image, text, org, font, size, color, thickness, cv2.LINE_AA)
+
+    def draw_zone_debug(tracker, start_x):
+        d = tracker.debug_info
+        cfg = tracker.cfg
+        
+        # 1. 狀態標頭 (位置隨 panel_height 自動連動)
+        status_color = (0, 255, 255) if d['status'] == "Hand Detected" else (150, 150, 150)
+        draw_text_with_shadow(img, f"[{tracker.zone_name}] {d['status']}", 
+                              (start_x, h - panel_height + 15), status_color, 0.35, 1)
+
+        for i in range(1, 13):
+            is_done = d['flags'][i-1] == 1
+            # 判斷當前是否正在執行該動作 (Buffer 累積中或正在搓洗)
+            is_active = d['active_buffers'][i] > 0
+           
+            # 判斷是否為「觸發當下」(門檻值達標那一幀)
+            is_trigger_moment = False
+            if 3 <= i <= 7:
+                #if d['counts'][i-1] >= cfg['scrub_flag_count'] and is_active:
+                #    is_trigger_moment = True
+                name = f'step{i}_min_scrub'
+                #if d['active_buffers'][i] >= cfg[name] and is_active:
+                #    is_trigger_moment = True
+                if d['counts'][i-1] >= cfg[name] and is_active:
+                    is_trigger_moment = True
+            else:
+                # 非搓洗步驟通常以 Buffer 10 為門檻
+                name = 'trigger_step1_8_buffer' if i in {1, 8} else f'trigger_step{i}_buffer'
+                if d['active_buffers'][i] >= cfg[name] and is_active:
+                    is_trigger_moment = True
+
+            # --- 顏色與狀態邏輯 ---
+            text_color = (255, 255, 255) # 預設白色 (狀態1: 未進行未觸發)
+            bg_color = None
+            suffix = ""
+
+            if is_trigger_moment:
+                # 狀態: 觸發當下 (粉色)
+                text_color = (0, 0, 0)      # 黑字
+                bg_color = (180, 105, 255)  # 粉色底
+                suffix = " !! TRIGGER !!"
+            elif is_active and is_done:
+                # 狀態2: 正在進行且曾觸發過 (黃字綠底)
+                text_color = (0, 255, 255)  # 黃字
+                bg_color = (34, 139, 34)    # 綠色底
+                suffix = " (RE-DOING)"
+            elif is_active and not is_done:
+                # 狀態3: 正在進行且未觸發過 (純黃色)
+                text_color = (0, 255, 255)
+                suffix = " << ACTIVE"
+            elif not is_active and is_done:
+                # 狀態4: 已觸發且目前未進行 (純綠色)
+                text_color = (0, 255, 0)
+                suffix = " [DONE]"
+            # 狀態1 (白色) 為預設值，不需額外處理
+
+            # 繪製文字與背景
+            #count_info = f" {d['counts'][i-1]}/{cfg['scrub_flag_count']}" if 3 <= i <= 7 else ""
+            name1 = f'step{i}_frame_scrub_ratio'
+            name2 = f'step{i}_min_scrub'
+            count_info = f" {d['counts'][i-1]}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else ""
+            line_text = f"Step {i}: {d['active_buffers'][i]:02d}{count_info}{suffix}"
+            
+            # y 座標隨 panel_height 自動計算，讓列表貼合底部
+            pos_y = h - (panel_height - 30) + (i-1) * line_height
+
+            if bg_color:
+                t_size = cv2.getTextSize(line_text, font, font_size, 1)[0]
+                # 畫色塊背景
+                cv2.rectangle(img, (start_x - 2, pos_y - 9), (start_x + t_size[0] + 5, pos_y + 3), bg_color, -1)
+                # 在色塊上畫字 (不帶陰影以增加清晰度)
+                cv2.putText(img, line_text, (start_x, pos_y), font, font_size, text_color, 1, cv2.LINE_AA)
+            else:
+                draw_text_with_shadow(img, line_text, (start_x, pos_y), text_color, font_size)
+
+        # 3. 累積位移量進度條 (緊貼底部)
+        move_acc = d['move_acc']
+        if move_acc > 0:
+            bar_w = int(min(move_acc * 15, 80)) 
+            cv2.rectangle(img, (start_x, h - 12), (start_x + bar_w, h - 6), (0, 255, 0), -1)
+            draw_text_with_shadow(img, f"Move: {move_acc:.1f}", (start_x + 90, h - 6), (0, 255, 0), 0.3)
+    
+    # --- 繪製半透明背景遮罩 ---
+    overlay = img.copy()
+    # 遮罩高度由 panel_height 控制
+    cv2.rectangle(overlay, (0, h - panel_height), (w, h), (20, 20, 20), -1)
+    cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
+
+    # 呼叫左右區域繪製 (使用 w 比例確保對齊)
+    draw_zone_debug(tracker_l, text_start_x_offset)
+    draw_zone_debug(tracker_r, int(w * 0.52))

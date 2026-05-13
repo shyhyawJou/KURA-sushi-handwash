@@ -33,6 +33,10 @@ class Csv_Manager:
         for suffix in ["flag", "time", "count"]:
             for i in range(1, 13):
                 self.headers.append(f"Step{i} {suffix}")
+        self.headers.extend(['Actual Sequence', 'Gloved Action Sequence'])
+        for i in range(3, 8):
+            self.headers.append(f'Step{i} min count')
+        self.headers.append('Finish reason')
 
         if not os.path.exists(self.file_path) or self.overwrite:
             with open(self.file_path, 'w', newline='', encoding='utf-8') as f:
