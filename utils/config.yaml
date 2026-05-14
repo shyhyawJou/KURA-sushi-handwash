@@ -14,7 +14,9 @@ streamer:
 
 AI:
     handwash:
-        path: 'best_0.8380_0.9060_epoch_91_kura_v16_fp16.dla'
+        #path: 'best_0.8380_0.9060_epoch_91_kura_v16_fp16.dla'
+        #path: 'best_0.8510_0.9030_epoch_56_kura_spray_alcohol_v2_fp16.dla'
+        path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
@@ -25,17 +27,22 @@ AI:
             - 'interlaced fingers'
             - 'thumb or wrist scrub'
             - 'scrub under nails'
-            - 'alcohol nozzle'
+            #- 'alcohol nozzle'
             - 'gloved hand'
             - 'left'
             - 'right'
-            - 'nail brush'
-            - 'paper towel'
-            - 'air outlet'
-            - 'brush tray'
-            - 'faucet'
-            - 'sink'
-            - 'soap dispenser'
+            #- 'nail brush'
+            #- 'paper towel'
+            #- 'air outlet'
+            #- 'brush tray'
+            #- 'faucet'
+            #- 'sink'
+            #- 'soap dispenser'
+            - 'spray alcohol'
+            - 'trigger soap dispenser'
+            - 'wipe hands with tissue'
+            - 'handwash'
+            - 'UV sterilization'
         
         agnostic_nms:  # null 是 disable
             -
@@ -153,15 +160,37 @@ visualization:
 
 logic:
     parameter:
-        trigger_buffer: 5            # 基礎緩衝幀數
-        scrub_verify_frames: 5       # 搓揉前驗證幀數
-        faucet_dist_thresh: 50       # 水龍頭附近判定距離 (px)
-        soap_dist_thresh: 45         # 洗手液附近判定距離 (px)
-        air_outlet_dist_thresh: 100  # 殺菌燈附近判定距離 (px)
-        alcohol_dist_thresh: 200     # 酒精噴灑判定距離 (px)
-        alcohol_trigger_frames: 5    # 酒精噴灑持續幀數
-        no_hand_timeout: 5           # 秒
-        step_idle_timeout: 30        # 秒
+        # 暫時沒用
+        trigger_step1_8_buffer: 20
+        trigger_step2_buffer: 20
+        trigger_step3_7_buffer: 20
+        trigger_step9_buffer: 10
+        trigger_step10_buffer: 20
+        trigger_step11_buffer: 20
+        trigger_step12_buffer: 20
+
+        # 換算
+        step3_frame_scrub_ratio: 7
+        step4_frame_scrub_ratio: 7
+        step5_frame_scrub_ratio: 7
+        step6_frame_scrub_ratio: 20
+        step7_frame_scrub_ratio: 10
+
+        step3_min_scrub: 10
+        step4_min_scrub: 10
+        step5_min_scrub: 10
+        step6_min_scrub: 10
+        step7_min_scrub: 10
+
+        scrub_min_frames: 3           # Step 3-7: 持續幾幀
+        no_hand_timeout: 3          # 消失幾秒後結束 Session
+        scrub_flag_count: 5           # 搓洗幾次完成
+        hand_wash_iou: 0.3            # Step 3-7 判定用
+        max_hand_ratio: 1.            # 手部佔畫面比例上限
+        move_dir_thresh: 0.05         # 搓洗位移門檻
+        scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
+        glove_iou_thresh: 0.2         # 手套判定門檻
+        min_repeat_interval: 10       # 相同步驟連續觸發必須要超過一定秒數
     
     class:
         hand:
@@ -169,24 +198,30 @@ logic:
             - 'right'
         gloved hand:
             - 'gloved hand'
-        device:
-            - 'air outlet'
-            - 'brush tray'
-            - 'faucet'
-            - 'sink'
-            - 'soap dispenser'
+        #device:
+        #    - 'air outlet'
+        #    - 'brush tray'
+        #    - 'faucet'
+        #    - 'sink'
+        #    - 'soap dispenser'
+        ai_logic_labels:
+            step1_8: 'handwash'
+            step2: 'trigger soap dispenser'
+            step9: 'wipe hands with tissue'
+            step10: 'UV sterilization'
+            step11: 'spray alcohol'
         handwash:
             - 'palm to palm'
             - 'palm over back'
             - 'interlaced fingers'
             - 'thumb or wrist scrub'
             - 'scrub under nails'
-        nail brush:
-            - 'nail brush'
-        paper towel:
-            - 'paper towel'
-        alcohol nozzle:
-            - 'alcohol nozzle'
+        #nail brush:
+        #    - 'nail brush'
+        #paper towel:
+        #    - 'paper towel'
+        #alcohol nozzle:
+        #    - 'alcohol nozzle'
 
 udp:
     ip: '127.0.0.1'

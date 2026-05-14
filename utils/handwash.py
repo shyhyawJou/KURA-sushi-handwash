@@ -1,401 +1,519 @@
 import numpy as np
-from datetime import datetime
+from numpy.linalg import norm as np_norm
+from datetime import datetime, timezone
 from loguru import logger
-from .plot import plot_distance, plot_xy, plot_timeout, DISTANCE_COLOR
 
 
 
 class HandWashTracker:
     def __init__(self, zone_name="Left", logic_cfg=None, ai_class=None, devices=None):
         self.zone_name = zone_name
-        if logic_cfg is None:
-            raise KeyError(f"[{zone_name}] logic_cfg must be provided in config.yaml under AI.handwash.logic")
-        
         self.cfg = logic_cfg['parameter']
-        self.no_hand_start_time = datetime.now()
-        self.idle_start_time = datetime.now()
-        self.logic_classes = logic_cfg['class']
         self.ai_classes = ai_class
         self.devices = devices
-        self.logic_labels = {cls: np.array([ai_class.index(name) for name in names]) 
-                             for cls, names in self.logic_classes.items()}
-
-        self._check()
-
-        logger.info(f'Tracker logic classes: {self.logic_classes}')
-        logger.info(f'Tracker logic labels: {self.logic_labels}')
+        
+        # 類別索引
+        self.logic_classes = logic_cfg['class']
+        self.label_bare_hand = [ai_class.index(n) for n in self.logic_classes['hand']]
+        self.label_gloved_hand = [ai_class.index(n) for n in self.logic_classes['gloved hand']]
+        
+        # 映射 AI 標籤索引
+        ai_labels = self.logic_classes['ai_logic_labels']
+        self.idx_step1_8 = ai_class.index(ai_labels['step1_8'])
+        self.idx_step2 = ai_class.index(ai_labels['step2'])
+        self.idx_step9 = ai_class.index(ai_labels['step9'])
+        self.idx_step10 = ai_class.index(ai_labels['step10'])
+        self.idx_step11 = ai_class.index(ai_labels['step11'])
+        
+        # Step 3-7
+        scrub_names = self.logic_classes['handwash']
+        self.label_to_step = {ai_class.index(name): i + 3 for i, name in enumerate(scrub_names)}
 
         self.reset()
 
-    def update(self, detections, img):
-        pass
-
-    def update_step_by_step(self, detections, img):
-        # 分組
-        hands = detections['box'][np.isin(detections['label'], self.logic_labels['hand'])]
-        gloved_hands = detections['box'][np.isin(detections['label'], self.logic_labels['gloved hand'])]
-        mask = np.isin(detections['label'], self.logic_labels['handwash'])
-        handwashes = detections['box'][mask]
-        handwash_labels = detections['label'][mask]
-        nail_brush = detections['box'][np.isin(detections['label'], self.logic_labels['nail brush'])]
-        paper_towel = detections['box'][np.isin(detections['label'], self.logic_labels['paper towel'])]
-        alcohol = detections['box'][np.isin(detections['label'], self.logic_labels['alcohol nozzle'])]
-        air_outlet = self.devices['air outlet'][0]
-        brush_tray = self.devices['brush tray'][0]
-        faucet = self.devices['faucet'][0]
-        soap_dispenser = self.devices['soap dispenser'][0]
-        sink = self.devices['sink'][0]
-
-        # 時間
-        now = datetime.now()
-        now_str = f'{now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]}Z'
-
-        # step
-        next_step = self.current_step + 1
-        if self.current_step == 0:
-            self.no_hand_start_time = now
-            self.idle_start_time = now
-    
-        # 沒手超時重置
-        elapsed = (now - self.no_hand_start_time).total_seconds()
-        plot_timeout(img, 'no hand', elapsed, sink[0:2] + [40, -80], (0, 0, 255))
-        timeout = self.cfg['no_hand_timeout']
-        if self.current_step > 0 and elapsed > timeout:
-            logger.warning(f"[{self.zone_name}] Session timeout (no hand exceed {timeout} seconds), "
-                           f"resetting from step {self.current_step}...")
-            res = self._get_final_data(now_str)
-            self.reset()
-            return now, res
-
-        # step 超時重置
-        elapsed = (now - self.idle_start_time).total_seconds()
-        plot_timeout(img, 'step idle', elapsed, sink[0:2] + [40, -50], (0, 165, 255))
-        timeout = self.cfg['step_idle_timeout']
-        if self.current_step > 0 and elapsed > timeout:
-            logger.warning(f"[{self.zone_name}] Session timeout (step idle {timeout} seconds), "
-                           f"resetting from step {self.current_step}...")
-            res = self._get_final_data(now_str)
-            self.reset()
-            return now, res
-
-        # 重置沒手開始時間
-        if len(hands) > 0:
-            self.no_hand_start_time = now
-
-        # --- Step 1: 沖水(浸濕手) ---
-        if next_step == 1:
-            
-            # 每隻手都要符合以下條件:
-            # 1. 手在水槽內
-            # 2. 手在水龍頭下方
-            # 3. 手離水龍頭夠近
-            # 4. 手上不能有 nail brush
-            is_active = False
-            faucet_mid_y = (faucet[1] + faucet[3]) / 2
-            if len(hands) > 0:
-                for hand in hands:
-                    hand_mid_y = (hand[1] + hand[3]) / 2
-                    dist = self._get_dist(hand, faucet)
-                    if not (self._is_contained(hand, sink) and \
-                            hand_mid_y > faucet_mid_y and \
-                            all(not self._is_collided(hand, brush) for brush in nail_brush) and \
-                            dist < self.cfg['faucet_dist_thresh']):
-                        break
-                else:
-                    is_active = True
-
-            self._handle_buffer(is_active, next_step, now_str)
-            if is_active and self.start_time is None:
-                self.start_time = now_str
-
-            # 可視化
-            for i, hand in enumerate(hands):
-                dist = self._get_dist(hand, faucet)
-                plot_distance(img, hand, faucet, dist, DISTANCE_COLOR[i])
-
-        # --- Step 2: 洗手液 ---
-        elif next_step == 2:
-
-            # 任一手符合以下條件:
-            # 1. 手碰觸洗手液
-            # 2. 手要在洗手液下方
-            # 3. 手要距離洗手液夠近
-            is_active = False
-            soap_mid_y = (soap_dispenser[1] + soap_dispenser[3]) / 2
-            for hand in hands:
-                hand_mid_y = (hand[1] + hand[3]) / 2
-                dist = self._get_dist(hand, soap_dispenser)
-                if (soap_mid_y < hand_mid_y and \
-                    dist < self.cfg['soap_dist_thresh'] and \
-                    self._is_collided(hand, soap_dispenser)):
-                    is_active = True
-                    break
-
-            self._handle_buffer(is_active, next_step, now_str)
-
-            # 可視化
-            for i, hand in enumerate(hands):
-                dist = self._get_dist(hand, soap_dispenser)
-                plot_distance(img, hand, soap_dispenser, dist, DISTANCE_COLOR[i])
-
-        # --- Step 3-6: 搓手動作 ---
-        elif 3 <= next_step <= 6 and len(handwash_labels) > 0:
-
-            # 每隻手要符合以下條件:
-            # 1. 在手槽內
-            is_active = False
-            if len(hands) > 0:
-                for hand in hands:
-                    if not self._is_contained(hand, sink):
-                        break
-                else:
-                    is_active = True
-
-            # 每個洗手動作要符合:
-            # 1. 只有一個洗手動作
-            # 2. 洗手動作在水槽內
-            label = handwash_labels[0]
-            is_active &= len(handwash_labels) == 1
-            is_active &= self.ai_classes[label] == self.logic_classes['handwash'][next_step - 3]
-
-            self._handle_buffer(is_active, next_step, now_str)
-
-        # --- Step 7: 洗指甲動作 ---
-        elif next_step == 7 and len(handwash_labels) > 0:
-
-            # 每隻手要符合以下條件:
-            # 1. 在手槽內
-            # 2. 手有接觸 nail brush
-            is_active = False
-            if len(hands) > 0:
-                for hand in hands:
-                    if not (self._is_contained(hand, sink) and \
-                            any(self._is_collided(hand, brush) for brush in nail_brush)):
-                        break
-                else:
-                    is_active = True
-
-            # 每個洗手動作要符合:
-            # 1. 只有一個洗手動作
-            # 2. 洗手動作在水槽內
-            label = handwash_labels[0]
-            is_active &= len(handwash_labels) == 1
-            is_active &= self.ai_classes[label] == self.logic_classes['handwash'][next_step - 3]
-
-            self._handle_buffer(is_active, next_step, now_str)
-
-        # --- Step 8: 沖水(沖洗洗手液) ---
-        if next_step == 8:
-            
-            # 每隻手都要符合以下條件:
-            # 1. 手在水槽內
-            # 2. 手在水龍頭下方
-            # 3. 手離水龍頭夠近
-            # 4. 手上不能有 nail brush
-            # 5. 做洗手動作且只有一個
-            is_active = False
-            faucet_mid_y = (faucet[1] + faucet[3]) / 2
-            if len(hands) > 0:
-                for hand in hands:
-                    hand_mid_y = (hand[1] + hand[3]) / 2
-                    dist = self._get_dist(hand, faucet)
-                    if not (hand_mid_y > faucet_mid_y and \
-                            dist < self.cfg['faucet_dist_thresh'] and \
-                            self._is_contained(hand, sink) and \
-                            all(not self._is_collided(hand, brush) for brush in nail_brush) and \
-                            len(handwashes) == 1 and \
-                            self._is_collided(hand, handwashes[0])):
-                        break
-                else:
-                    is_active = True
-
-            self._handle_buffer(is_active, next_step, now_str)
-
-            # 可視化
-            for i, hand in enumerate(hands):
-                dist = self._get_dist(hand, faucet)
-                plot_distance(img, hand, faucet, dist, DISTANCE_COLOR[i])
-
-        # --- Step 9: 擦手紙 ---
-        elif next_step == 9:
-
-            # 每隻手都要符合以下條件:
-            # 1. 任一衛生紙在水龍頭下方
-            # 2. 手有接觸擦手紙
-            is_active = False
-            if len(hands) > 0:
-                faucet_y = (faucet[1] + faucet[3]) / 2.
-                for hand in hands:
-                    is_valid = False
-                    for paper in paper_towel:
-                        paper_y = (paper[1] + paper[3]) / 2.
-                        if paper_y > faucet_y and self._is_collided(paper, hand):
-                            is_valid = True
-                            break
-                    
-                    if not is_valid:
-                        break
-                else:
-                    is_active = True
-
-            self._handle_buffer(is_active, next_step, now_str)
-
-        ## --- Step 10: 殺菌燈 ---
-        elif next_step == 10:
-
-            # 手要符合以下條件:
-            # 1. 距離 air outlet 要夠近 (每隻手)
-            # 2. 與殺菌燈有交集 (任一手)
-            is_active = False
-            any_valid = False
-            if len(hands) > 0:
-                for hand in hands:
-                    dist = self._get_dist(hand, air_outlet)
-                    any_valid |= self._is_collided(hand, air_outlet)
-                    if not dist < self.cfg['air_outlet_dist_thresh']:
-                        break
-                else:
-                    is_active = True
-
-            is_active &= any_valid
-            self._handle_buffer(is_active, next_step, now_str)
-
-            # 可視化
-            for i, hand in enumerate(hands):
-                dist = self._get_dist(hand, air_outlet)
-                plot_distance(img, hand, air_outlet, dist, DISTANCE_COLOR[i])
-
-        # --- Step 11: 酒精噴灑 ---
-        elif next_step == 11:
-
-            # 要符合以下條件:
-            # 1. 任一手有接觸酒精
-            # 2. 手和任一酒精都要在水龍頭下方的範圍內
-            is_active = False
-            is_valid = False
-
-            if len(hands) > 0:
-                faucet_y = (faucet[1] + faucet[3]) / 2.
-                                
-                for hand in hands:
-                    hand_y = (hand[1] + hand[3]) / 2.
-                    if not hand_y > faucet_y:
-                        break
-                    
-                    if not is_valid:
-                        for alc in alcohol:
-                            alcohol_y = (alc[1] + alc[3]) / 2.
-                            if alcohol_y > faucet_y and self._is_collided(hand, alc):
-                                is_valid = True
-                                break
-                else:
-                    is_active = True
-
-            is_active &= is_valid
-            self._handle_buffer(is_active, next_step, now_str)
-
-        # --- 8. Step 12: 酒精搓揉 ---
-        elif next_step == 12:
-
-            # 要符合以下條件:
-            # 1. 在做洗手動作
-            # 2. 手要在水龍頭下方
-            is_active = False
-            is_valid = False
-
-            if len(hands) > 0:
-                faucet_y = (faucet[1] + faucet[3]) / 2.
-                for hand in hands:
-                    hand_y = (hand[1] + hand[3]) / 2.
-                    if not (len(handwashes) > 0 and \
-                            hand_y > faucet_y and \
-                            self._is_collided(handwashes[0], hand)):
-                        break
-                else:
-                    is_active = True
-
-            is_active &= len(handwashes) == 1
-            self._handle_buffer(is_active, 12, now_str)
-
-        if self.current_step == 12:
-            res = self._get_final_data(now_str)
-            self.reset()
-            return now, res
-        
-        return now, None
-
     def reset(self):
-        self.current_step = 0  
         self.start_time = None
         self.flags = [0] * 12
         self.times = [""] * 12
         self.counts = [-1] * 12
         for i in range(2, 7): self.counts[i] = 0
         
-        self.buffer_count = 0
-        self.alcohol_in_progress = False
-        self.no_hand_start_time = datetime.now()
-        self.idle_start_time = datetime.now()
-        logger.info(f"[{self.zone_name}] Tracker Reset.")
+        self.step_sequence = []
+        self.last_step_trigger_times = {}
+        self.gloved_sequence = []
+        
+        # Buffer 初始化
+        self.collision_buffers = {i: 0 for i in range(1, 13)}
+        
+        self.current_scrub_label = None
+        self.scrub_frame_counter = 0
+        
+        self.no_hand_start_time = datetime.now(timezone.utc)
+        self.has_soaped = False 
+        self.temp_continuous_collisions = [0] * 12 
+        self.now_dt = None       
+        self.finish_reason = None
 
-    def _handle_buffer(self, condition, step_num, time_str):
-        if condition:
-            self.idle_start_time = datetime.now()  # 重置
-            self.buffer_count += 1
-            if self.buffer_count >= self.cfg['trigger_buffer']:
-                self._trigger(step_num, time_str)
+        self._reset_scrub_vars()
+
+        self._clear_debug_info()
+        
+    def update(self, detections, img):
+        self.now_dt = datetime.now(timezone.utc)
+        self._clear_debug_info() # 每一幀先清除舊資料
+        
+        h, w = img.shape[:2]
+        frame_area = h * w
+        
+        # 1. 抓出手部與過濾
+        hand_mask = np.isin(detections['label'], self.label_bare_hand + self.label_gloved_hand)
+        hands = detections['box'][hand_mask]
+        
+        hand_areas = (hands[:, 2] - hands[:, 0]) * (hands[:, 3] - hands[:, 1])
+        valid_mask = (hand_areas / frame_area) <= self.cfg['max_hand_ratio']
+        valid_hands = hands[valid_mask]
+
+        if len(valid_hands) > 0:
+            self.debug_info['status'] = "Hand Detected" # 修正 1: 確保 status 有更新
+            self.no_hand_start_time = self.now_dt
+            if not self.start_time:
+                self.start_time = self._get_utc_now()
         else:
-            self.buffer_count = 0
+            self.debug_info['status'] = "No Hand"
+            elapsed = (self.now_dt - self.no_hand_start_time).total_seconds()
+            if self.start_time and elapsed > self.cfg['no_hand_timeout']:
+                self.finish_reason = 'no hand timeout'
+                return self.now_dt, self._finalize_session()
+            return self.now_dt, None
 
-    def _trigger(self, step_num, time_str):
-        self.flags[step_num-1] = 1
-        self.times[step_num-1] = time_str
-        self.current_step = step_num
-        self.buffer_count = 0 
-        logger.info(f"[{self.zone_name}] Step {step_num} Done")
+        is_gloved, _ = self._verify_glove(detections)
+
+        # --- 以下為各別實現的 AI 邏輯 ---
+        self._logic_step_1_8(detections, is_gloved)
+        self._logic_step_2(detections, is_gloved)
+        #self._logic_step_3_7(valid_hands, detections, is_gloved) # 不動
+        self._logic_step_3_7(detections, is_gloved) # 不動
+        self._logic_step_9(detections, is_gloved)
+        self._logic_step_10(detections, is_gloved)
+        self._logic_step_11(detections, is_gloved)
+        self._logic_step_12(valid_hands, is_gloved) # 依賴雙手重疊，暫不更動
+
+        # 更新 debug_info 數值
+        self.debug_info['move_acc'] = self.move_acc
+        self.debug_info['flags'] = self.flags.copy()
+        self.debug_info['counts'] = self.counts.copy()
+        self.debug_info['active_buffers'] = self.collision_buffers.copy()
+
+        # 自動結案
+        if all(f == 1 for f in self.flags):
+            self.finish_reason = 'all flags are 1'
+            return self.now_dt, self._finalize_session()
+
+        return self.now_dt, None
+
+    def _finalize_session(self):
+        """ 結束 Session 並回傳資料，若完全無進度則放棄寫入 """
+        end_time_str = self._get_utc_now()
+        
+        # 需求：過濾完全沒更新的紀錄
+        # 如果 flags 全部都是 0，代表 12 個步驟一個都沒達成
+        if sum(self.flags) == 0:
+            logger.info(f"[{self.zone_name}] Session timed out with no progress. Skipping CSV write.")
+            self.reset() # 依舊要重置狀態，但不回傳資料
+            return None 
+
+        # 正常寫入邏輯
+        final_data = self._get_final_data(end_time_str)
+
+        # 結果
+        n_valid = sum(self.flags)
+        if n_valid == len(self.flags):
+            logger.success(f"[{self.zone_name}] Session completed. Saving to CSV.")
+        else:
+            logger.warning(f"[{self.zone_name}] Session completed with only {n_valid} steps! "
+                           f"Saving to CSV.")
+        
+        self.reset()
+        return final_data
+
+    def _logic_step_1_8(self, detections, is_gloved):
+        """ Step 1 & 8: 基於 AI 偵測到 handwash """
+        step = 8 if self.has_soaped else 1
+        if self.idx_step1_8 in detections['label']:
+            self.collision_buffers[step] += 1
+            if self.collision_buffers[step] == self.cfg['trigger_step1_8_buffer']:
+                self._update_record(step, is_gloved)
+        else:
+            # 洗掉肥皂
+            num_collision = self.collision_buffers[step]
+            if self.has_soaped and num_collision >= self.cfg['trigger_step1_8_buffer']:
+                self.has_soaped = False
+            self.collision_buffers[step] = 0  # 重置
+
+    def _logic_step_2(self, detections, is_gloved):
+        """ Step 2: 基於 AI 偵測到 trigger soap dispenser """
+        if self.idx_step2 in detections['label']:
+            self.collision_buffers[2] += 1
+            if self.collision_buffers[2] == self.cfg['trigger_step2_buffer']:
+                self._update_record(2, is_gloved)
+                self.has_soaped = True 
+        else:
+            self.collision_buffers[2] = 0
+
+    #def _logic_step_3_7(self, hands, detections, is_gloved):
+    #    if len(hands) == 0:
+    #        #self._reset_scrub_vars()
+    #        return
+#
+    #    # 依照信心分數排序
+    #    #hand_indices = hand_indices[np.argsort(detections['score'][hand_indices])[::-1]]
+#
+    #    # 判定參考框
+    #    if len(hands) >= 2:
+    #        h1, h2 = hands[0], hands[1]
+    #    else:
+    #        h1 = hands[0]
+    #        h2 = hands[0] # 傳入相同框觸發單手位移邏輯
+#
+    #    target_step = None
+    #    
+    #    # 洗手動作
+    #    mask = np.isin(detections['label'], list(self.label_to_step.keys()))
+    #    handwash = detections['box'][mask]
+    #    label = detections['label'][mask]
+#
+    #    # 必須唯一
+    #    if len(handwash) != 1:
+    #        return
+#
+    #    # 是否確實在做洗手 (iou 判斷)
+    #    handwash = handwash[0]
+    #    label = label[0]
+    #    if all(self.get_iou(h, handwash) > self.cfg['hand_wash_iou'] for h in hands):
+    #        target_step = label
+#
+    #    # 狀態機與計次觸發
+    #    if target_step:
+    #        if target_step == self.current_scrub_label:
+    #            self.scrub_frame_counter += 1
+    #        else:
+    #            self.scrub_frame_counter = 1
+    #            self.current_scrub_label = target_step
+    #            self._reset_scrub_vars()
+#
+    #        if self.scrub_frame_counter >= self.cfg['scrub_min_frames']:
+    #            self._do_scrub_count(target_step, h1, h2, is_gloved)
+    #    else:
+    #        pass
+    #        #self.scrub_frame_counter = 0
+    #        #self.current_scrub_label = None
+    #        #self._reset_scrub_vars()
+
+    def _logic_step_3_7(self, detections, is_gloved):
+        """ 
+        Step 3-7: 基於幀數的連續計數機制
+        """
+        # 1. 找出當前畫面中是否有屬於 Step 3-7 的 Label
+        mask = np.isin(detections['label'], list(self.label_to_step.keys()))
+        active_labels = detections['label'][mask]
+
+        target_step = None
+        if len(active_labels) > 0:
+            # 取第一個（通常是信心分數最高者）
+            detected_label = active_labels[0] 
+            target_step = self.label_to_step[detected_label]
+
+        # 2. 更新狀態機
+        if target_step is not None:
+            # 如果換了動作，上一波的連續計數要中斷
+            if target_step != self.current_scrub_label:
+                if self.current_scrub_label is not None:
+                    self.temp_continuous_collisions[self.current_scrub_label - 1] = 0
+                self.current_scrub_label = target_step
+            
+            # 呼叫計數邏輯（傳入 True 代表偵測中）
+            self._do_scrub_count(target_step, is_gloved, detected=True)
+            
+            # 重置其他步驟的 Buffer 與連續計數（嚴格模式：一次只能做一件事）
+            for s in range(3, 8):
+                if s != target_step:
+                    self.collision_buffers[s] = 0
+                    self.temp_continuous_collisions[s-1] = 0
+        else:
+            # 畫面上沒東西，重置當前動作的連續計數
+            if self.current_scrub_label is not None:
+                self.temp_continuous_collisions[self.current_scrub_label - 1] = 0
+                self.collision_buffers[self.current_scrub_label] = 0
+            self.current_scrub_label = None
+
+    def _logic_step_9(self, detections, is_gloved):
+        """ Step 9: 基於 AI 偵測到 wipe hands with tissue """
+        if self.idx_step9 in detections['label']:
+            self.collision_buffers[9] += 1
+            if self.collision_buffers[9] == self.cfg['trigger_step9_buffer']:
+                self._update_record(9, is_gloved)
+        else:
+            self.collision_buffers[9] = 0
+
+    def _logic_step_10(self, detections, is_gloved):
+        """ Step 10: 基於 AI 偵測到 UV sterilization """
+        if self.idx_step10 in detections['label']:
+            self.collision_buffers[10] += 1
+            if self.collision_buffers[10] == self.cfg['trigger_step10_buffer']:
+                self._update_record(10, is_gloved)
+        else:
+            self.collision_buffers[10] = 0
+
+    def _logic_step_11(self, detections, is_gloved):
+        """ Step 11: 基於 AI 偵測到 spray alcohol """
+        if self.idx_step11 in detections['label']:
+            self.collision_buffers[11] += 1
+            if self.collision_buffers[11] == self.cfg['trigger_step11_buffer']:
+                self._update_record(11, is_gloved)
+        else:
+            self.collision_buffers[11] = 0
+
+    def _logic_step_12(self, hands, is_gloved):
+        """ 
+        Step 12: 依舊維持雙手重疊判定 
+        修正：必須緊接在 Step 11 之後觸發才有效 (中間不可穿插其他步驟)
+        """
+        # 條件 1: 檢查 step_sequence 的最後一個步驟是否為 11
+        # 這樣可以確保 Step 12 是緊接在 11 之後，且中間沒有別的有效步驟
+        is_after_step11 = len(self.step_sequence) > 0 and self.step_sequence[-1] == 11
+        
+        if is_after_step11 and len(hands) >= 2:
+            if self.get_iou(hands[0], hands[1]) > self.cfg['scrub_overlap_thresh']:
+                self.collision_buffers[12] += 1
+                if self.collision_buffers[12] == self.cfg['trigger_step12_buffer']:
+                    self._update_record(12, is_gloved)
+                return
+        self.collision_buffers[12] = 0
+
+    #def _do_scrub_count(self, step_num, box1, box2, is_gloved):
+    #    """ 需求 10: 完整的連續最高次數計數邏輯 """
+    #    _, move_detected = self._calculate_movement(box1, box2)
+    #    
+    #    if move_detected:
+    #        # 這裡的邏輯是：方向切換一次算 0.5 次，來回算 1 次
+    #        # 為了簡化，您可以根據需求調整
+    #        self.temp_continuous_counts[step_num-1] += 1
+    #        
+    #        # 需求 10: 只有目前這波「連續次數」超過歷史最高，才更新 counts
+    #        if self.temp_continuous_counts[step_num-1] > self.counts[step_num-1]:
+    #            self.counts[step_num-1] = self.temp_continuous_counts[step_num-1]
+    #            
+    #        # 檢查是否達到 Flag 門檻
+    #        if self.counts[step_num-1] == self.cfg['scrub_flag_count']:
+    #            self._update_record(step_num, is_gloved)
+    #    else:
+    #        # 動作停下來了，連續計數中斷
+    #        self.temp_continuous_counts[step_num-1] = 0
+    #        #self._reset_scrub_vars()
+
+    def _do_scrub_count(self, step_num, is_gloved, detected=False):
+        """ 
+        保留 temp_count 機制：
+        temp_continuous_collisions 記錄「這一波」連續偵測到的幀數。
+        self.counts 記錄該步驟「歷史最高」的連續幀數。
+        """
+        if detected:
+            # 增加 Buffer (用於判斷是否正在觸發)
+            self.collision_buffers[step_num] += 1
+            
+            # 增加這一波的連續計數
+            idx = step_num - 1
+            self.temp_continuous_collisions[idx] += 1
+            
+            # 需求 10：只有目前這波超過歷史最高，才更新 counts
+            name = f'step{step_num}_frame_scrub_ratio'
+            current_count = self.temp_continuous_collisions[idx] // self.cfg[name]
+            if current_count > self.counts[idx]:
+                self.counts[idx] = current_count
+                
+            # 檢查是否達到 Flag 門檻
+            if self.counts[idx] == self.cfg[f'step{step_num}_min_scrub']:
+                self._update_record(step_num, is_gloved)
+        else:
+            # 偵測中斷，該波計數歸零
+            #self.temp_continuous_collisions[step_num - 1] = 0
+            #self.collision_buffers[step_num - 1] = 0
+            pass
+
+    def _calculate_movement(self, box1, box2):
+        """
+        支援雙手相對位移 或 單手自身位移 (修正類型衝突 Bug)
+        """
+        # 1. 取得當前的特徵值 (Current Value)
+        if np.array_equal(box1, box2):
+            # 單手模式：特徵值是中心點座標 [x, y] (ndarray)
+            curr_val = (box1[:2] + box1[2:]) / 2
+            # 存入 debug 資訊 (單手存座標)
+            self.debug_info['hand_dist'] = 0.0 
+            self.debug_info['hand_center'] = curr_val.tolist()
+        else:
+            # 雙手模式：特徵值是兩手中心點的「距離」 (float)
+            c1 = (box1[:2] + box1[2:]) / 2
+            c2 = (box2[:2] + box2[2:]) / 2
+            curr_val = float(np_norm(c1 - c2))
+            # 存入 debug 資訊 (雙手存距離)
+            self.debug_info['hand_dist'] = curr_val
+            self.debug_info['hand_center'] = None
+
+        move_detected = False
+        
+        # 2. 與上一幀比較
+        if self.prev_dist is not None:
+            # --- 關鍵修正：檢查類型是否一致，若不一致則重置並跳過 ---
+            if type(curr_val) != type(self.prev_dist):
+                self.prev_dist = curr_val
+                self.last_dir = 0
+                self.move_acc = 0.0
+                return curr_val, False
+
+            # 3. 判斷差異 (diff)
+            if isinstance(curr_val, np.ndarray):
+                # 單手模式：計算座標位移向量的長度
+                diff_vec = curr_val - self.prev_dist
+                diff = np_norm(diff_vec)
+                # 為了判定方向 (last_dir)，我們取位移最大的軸向 (以 y 軸為例)
+                cur_dir = 1 if diff_vec[1] > self.cfg['move_dir_thresh'] else (-1 if diff_vec[1] < -self.cfg['move_dir_thresh'] else 0)
+            else:
+                # 雙手模式：計算距離的變化量
+                diff = curr_val - self.prev_dist
+                cur_dir = 1 if diff > self.cfg['move_dir_thresh'] else (-1 if diff < -self.cfg['move_dir_thresh'] else 0)
+            
+            # 4. 累積位移與方向判定
+            if cur_dir != 0:
+                if cur_dir != self.last_dir:
+                    # 方向改變，清空累積位移重新計算
+                    self.move_acc = 0.0
+                
+                self.move_acc += abs(diff)
+                self.last_dir = cur_dir
+
+                # 位移量達標判定 (門檻維持 5.0)
+                if self.move_acc > 5.0: 
+                    move_detected = True
+                    
+        # 5. 更新緩存
+        self.prev_dist = curr_val
+        return curr_val, move_detected
+
+    def _update_record(self, step_num, is_gloved):
+        utc_now_dt = self.now_dt
+        utc_now_str = self._get_utc_now()
+
+        if is_gloved:
+            if not self.gloved_sequence or self.gloved_sequence[-1] != step_num:
+                self.gloved_sequence.append(step_num)
+            return
+
+        # 1. 檢查是否與序列最後一個步驟相同
+        is_same_as_last = len(self.step_sequence) > 0 and self.step_sequence[-1] == step_num
+        
+        if is_same_as_last:
+            # 2. 如果相同，檢查時間間隔
+            last_time = self.last_step_trigger_times.get(step_num)
+            if last_time:
+                elapsed = (utc_now_dt - last_time).total_seconds()
+                if elapsed < self.cfg['min_repeat_interval']:
+                    # 連續且間隔太短 -> 忽略
+                    self.debug_info['is_same_as_last_and_fast'] = True
+                    return
+                
+        if self.flags[step_num-1] == 0:
+            self.flags[step_num-1] = 1
+            self.times[step_num-1] = utc_now_str
+        
+        if not self.step_sequence or self.step_sequence[-1] != step_num:
+            self.step_sequence.append(step_num)
+            logger.info(f"[{self.zone_name}] VALIDATED: Step {step_num}")
+
+    def _verify_glove(self, detections):
+        g_boxes = detections['box'][np.isin(detections['label'], self.label_gloved_hand)]
+        b_boxes = detections['box'][np.isin(detections['label'], self.label_bare_hand)]
+        
+        if len(g_boxes) == 0: 
+            return False, np.array([False] * len(b_boxes))
+        
+        gloved_mask = []
+        for gb in g_boxes:
+            for bb in b_boxes:
+                gloved_mask.append(self._calculate_iou(gb, bb) > self.cfg['glove_iou_thresh'])
+        gloved_mask = np.array(gloved_mask).reshape(len(g_boxes), -1).any(0)
+        return gloved_mask.any(), gloved_mask
+
+    def _calculate_iou(self, b1, b2):
+        xA, yA, xB, yB = max(b1[0], b2[0]), max(b1[1], b2[1]), min(b1[2], b2[2]), min(b1[3], b2[3])
+        inter = max(0, xB-xA) * max(0, yB-yA)
+        area1 = (b1[2]-b1[0])*(b1[3]-b1[1])
+        area2 = (b2[2]-b2[0])*(b2[3]-b2[1])
+        union = area1 + area2 - inter
+        return inter / union if union > 0 else 0
 
     def _get_final_data(self, end_time):
-        res = {"Store ID": 1, "Start Time": self.start_time, "End Time": end_time}
+        res = {"Store ID": "test", "Start Time": self.start_time, "End Time": end_time,
+               "Actual Sequence": self.step_sequence, "Gloved Action Sequence": self.gloved_sequence}
         for i in range(1, 13):
             res[f"Step{i} flag"] = self.flags[i-1]
             res[f"Step{i} time"] = self.times[i-1]
             res[f"Step{i} count"] = self.counts[i-1]
+        for i in range(3, 8):
+            res[f'Step{i} min count'] = self.cfg[f'step{i}_min_scrub']
+        res['Finish reason'] = self.finish_reason
         return res
+    
+    def _get_utc_now(self):
+        return self.now_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-    def _is_collided(self, boxA, boxB):
-        """ 判斷兩個 BBox 是否有重疊 """
-        xA = max(boxA[0], boxB[0])
-        yA = max(boxA[1], boxB[1])
-        xB = min(boxA[2], boxB[2])
-        yB = min(boxA[3], boxB[3])
-        interArea = max(0, xB - xA) * max(0, yB - yA)
-        return interArea > 0
+    def _clear_debug_info(self):
+        """ 每一幀開始時重置 Debug 資訊 """
+        self.debug_info = {
+            "status": "No Hand",
+            "move_acc": self.move_acc,
+            "flags": self.flags.copy(),
+            "counts": self.counts.copy(),
+            "active_buffers": self.collision_buffers.copy(), # 提供給 plot.py 使用
+            "hand_dist": 0.0,
+            "hand_center": None,
+            'is_same_as_last_and_fast': False
+        }
+        
+    @staticmethod
+    def get_iou(box1, box2):
+        """ 工具函式：計算兩框之交集 / 聯集 (IoU) """
+        xA, yA = max(box1[0], box2[0]), max(box1[1], box2[1])
+        xB, yB = min(box1[2], box2[2]), min(box1[3], box2[3])
+        inter = max(0, xB - xA) * max(0, yB - yA)
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        union = area1 + area2 - inter
+        return inter / union if union > 0 else 0
+    
+    @staticmethod
+    def is_contained(outer_box, inner_box_or_pt):
+        """ 檢查 outer_box 是否包含指定的點或框 """
+        if len(inner_box_or_pt) == 2: # 點 [x, y]
+            x, y = inner_box_or_pt
+            return outer_box[0] <= x <= outer_box[2] and outer_box[1] <= y <= outer_box[3]
+        else: # 框 [x1, y1, x2, y2]
+            return (inner_box_or_pt[0] >= outer_box[0] and inner_box_or_pt[1] >= outer_box[1] and 
+                    inner_box_or_pt[2] <= outer_box[2] and inner_box_or_pt[3] <= outer_box[3])
 
-    def _is_contained(self, boxA, boxB):
-        """ 判斷 boxB 是否有完全包含 boxA """
-        is_inside = (boxA[0] >= boxB[0] and  # x1
-                     boxA[1] >= boxB[1] and  # y1
-                     boxA[2] <= boxB[2] and  # x2
-                     boxA[3] <= boxB[3])     # y2
-        return is_inside
+    def _reset_scrub_vars(self):
+        """ 重置位移判定相關變數 (需求 8) """
+        self.prev_dist = None
+        self.last_dir = 0
+        self.move_acc = 0.0
 
-    def _get_dist(self, boxA, boxB):
-        cA = (boxA[0:2] + boxA[2:4]) / 2.
-        cB = (boxB[0:2] + boxB[2:4]) / 2.
-        return np.linalg.norm(cA - cB)
-
-    def _get_point_to_line_dist(self, p, l1, l2):
-        p, l1, l2 = np.array(p), np.array(l1), np.array(l2)
-        line_vec = l2 - l1
-        p_vec = p - l1
-        line_len_sq = np.sum(line_vec**2)
-        t = max(0, min(1, np.dot(p_vec, line_vec) / (line_len_sq + 1e-6)))
-        projection = l1 + t * line_vec
-        return np.linalg.norm(p - projection)
-
-    def _check(self):
-        # 檢查 device
-        for dev, boxes in self.devices.items():
-            if len(boxes) != 1:
-                logger.error(f'amount of {dev} should be 1 but got {len(boxes)} ! ')
-
+    def _get_intersection_ratio(self, box_hand, box_device, mode='device'):
+        """ 計算交集佔比。mode='device' 表示 交集/設備面積 """
+        xA, yA = max(box_hand[0], box_device[0]), max(box_hand[1], box_device[1])
+        xB, yB = min(box_hand[2], box_device[2]), min(box_hand[3], box_device[3])
+        inter = max(0, xB - xA) * max(0, yB - yA)
+        if mode == 'device':
+            denom = (box_device[2] - box_device[0]) * (box_device[3] - box_device[1])
+        else:
+            denom = (box_hand[2] - box_hand[0]) * (box_hand[3] - box_hand[1])
+        return inter / max(1.0, denom)
