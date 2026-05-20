@@ -46,7 +46,8 @@ class HandWashTracker:
         self.start_time = None
         self.flags = [0] * 12
         self.trigger_times = [""] * 12
-        self.counts = [0] * 12
+        self.counts = [0] * 12  # 歷史最高
+        self.current_counts = [0] * 12  # 當前連續
         
         for i in range(2, 7): self.counts[i] = 0
         
@@ -604,10 +605,10 @@ class HandWashTracker:
                 return
             
             #logger.info(f'the most continuous buffers in this frame is step{step} !')
-
+            name = f'step{step}_frame_scrub_ratio'
             msgs = {
                 "step_id": f"Step{step}",
-                "washcount": str(self.counts[step - 1]),
+                "washcount": str(self.temp_continuous_collisions[step - 1] // self.cfg[name]),
                 "washtime": str(self.durations[step]),
                 "side": self.zone_name.lower()
             }
