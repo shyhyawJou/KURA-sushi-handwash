@@ -37,6 +37,9 @@ class HandWashTracker:
         self.pub_period = 1. / pub_freq
         self.pub_time = float('-inf')
 
+        #
+        self.is_no_hand_timeout = False
+
         self.reset()
 
     def reset(self):
@@ -97,6 +100,10 @@ class HandWashTracker:
             if self.start_time and elapsed > self.cfg['no_hand_timeout']:
                 self.finish_reason = 'no hand timeout'
                 self.update_debug_info()
+                
+                # 如果 no hand timeout 的狀態沒解除, 不連續發送 reset
+                #if not self.is_no_hand_timeout:
+                #    self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
                 self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
                 return self.now_dt, self._finalize_session()
             return self.now_dt, None
