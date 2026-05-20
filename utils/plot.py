@@ -371,9 +371,10 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             name1 = f'step{i}_frame_scrub_ratio'
             name2 = f'step{i}_min_scrub'
             duration = d['durations'][i]
+            max_duration = d['max_durations'][i]
             active_buffers = d['active_buffers'][i]
-            count_info = f" {d['counts'][i-1]}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else ""
-            line_text = f"Step {i}: {active_buffers:02d}{count_info} {duration:.1f} {suffix}"
+            count_info = f" {d['counts'][i-1]}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else "-1"
+            line_text = f"Step {i:<2}: {active_buffers:02d}{count_info} {max_duration:.1f} {suffix}"
             
             # y 座標隨 panel_height 自動計算，讓列表貼合底部
             pos_y = h - (panel_height - 30) + (i-1) * line_height
@@ -396,7 +397,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
 
     def render_rich_mqtt_on_frame(tracker, start_x, start_y, title_color):
         d = tracker.debug_info
-        sent_msg = d.get('sent_msg')
+        sent_msg = d['sent_msg']
         if not sent_msg:
             return
             

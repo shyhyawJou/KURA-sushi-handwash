@@ -219,3 +219,4 @@ mqtt:
             process: 'handwash/process'
         subscribe: {}
     qos: 0
+    pub_freq: 5

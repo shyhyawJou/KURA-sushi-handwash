@@ -8,7 +8,7 @@ from loguru import logger
 
 class HandWashTracker:
     def __init__(self, zone_name="Left", logic_cfg=None, ai_class=None, devices=None,
-                 mqtt = None):
+                 mqtt = None, pub_freq=10):
         
         self.zone_name = zone_name
         self.cfg = logic_cfg['parameter']
@@ -34,6 +34,8 @@ class HandWashTracker:
 
         # mqtt
         self.mqtt = mqtt
+        self.pub_period = 1. / pub_freq
+        self.pub_time = float('-inf')
 
         self.reset()
 
@@ -52,8 +54,9 @@ class HandWashTracker:
         # Buffer 初始化
         self.collision_buffers = {i: 0 for i in range(1, 13)}
         self.durations = {i: 0.0 for i in range(1, 13)}
+        self.max_durations = {i: 0.0 for i in range(1, 13)}
         self.step_start_times = {i: 0.0 for i in range(1, 13)}
-        
+
         self.current_scrub_label = None
         self.scrub_frame_counter = 0
         
@@ -61,20 +64,16 @@ class HandWashTracker:
         self.has_soaped = False 
         self.temp_continuous_collisions = [0] * 12 
         self.now_dt = None       
-        self.is_finished = False
         self.finish_reason = None
 
         self._reset_scrub_vars()
 
-        self._clear_debug_info()
+        #self._clear_debug_info()
         
     def update(self, detections, img):
         self.now_dt = datetime.now(timezone.utc)
         
-        # reset
         self._clear_debug_info()
-        if self.is_finished:
-            self.reset()
 
         h, w = img.shape[:2]
         frame_area = h * w
@@ -88,7 +87,7 @@ class HandWashTracker:
         valid_hands = hands[valid_mask]
 
         if len(valid_hands) > 0:
-            self.debug_info['status'] = "Hand Detected" # 修正 1: 確保 status 有更新
+            self.debug_info['status'] = "Hand Detected"
             self.no_hand_start_time = self.now_dt
             if not self.start_time:
                 self.start_time = self._get_utc_now()
@@ -97,7 +96,7 @@ class HandWashTracker:
             elapsed = (self.now_dt - self.no_hand_start_time).total_seconds()
             if self.start_time and elapsed > self.cfg['no_hand_timeout']:
                 self.finish_reason = 'no hand timeout'
-                # 發送訊息給應用端
+                self.update_debug_info()
                 self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
                 return self.now_dt, self._finalize_session()
             return self.now_dt, None
@@ -107,18 +106,15 @@ class HandWashTracker:
         # --- 以下為各別實現的 AI 邏輯 ---
         self._logic_step_1_8(detections, is_gloved)
         self._logic_step_2(detections, is_gloved)
-        #self._logic_step_3_7(valid_hands, detections, is_gloved) # 不動
-        self._logic_step_3_7(detections, is_gloved) # 不動
+        #self._logic_step_3_7(valid_hands, detections, is_gloved)
+        self._logic_step_3_7(detections, is_gloved)
         self._logic_step_9(detections, is_gloved)
         self._logic_step_10(detections, is_gloved)
         self._logic_step_11(detections, is_gloved)
         self._logic_step_12(valid_hands, is_gloved) # 依賴雙手重疊，暫不更動
 
-        # 更新 debug_info 數值
-        self.debug_info['move_acc'] = self.move_acc
-        self.debug_info['flags'] = self.flags.copy()
-        self.debug_info['counts'] = self.counts.copy()
-        self.debug_info['active_buffers'] = self.collision_buffers.copy()
+        # 更新 debug 資料
+        self.update_debug_info()
 
         # 自動結案
         if all(f == 1 for f in self.flags):
@@ -140,7 +136,6 @@ class HandWashTracker:
         # 如果 flags 全部都是 0，代表 12 個步驟一個都沒達成
         if sum(self.flags) == 0:
             logger.info(f"[{self.zone_name}] Session timed out with no progress. Skipping CSV write.")
-            self.is_finished = True
             self.reset()
             return None 
 
@@ -156,7 +151,6 @@ class HandWashTracker:
                            f"Saving to CSV.")
         
         # 重置 
-        self.is_finished = True
         self.reset()
         return final_data
 
@@ -525,12 +519,19 @@ class HandWashTracker:
             "counts": self.counts.copy(),
             "active_buffers": self.collision_buffers.copy(),
             "durations": self.durations.copy(),
+            "max_durations": self.max_durations.copy(),
             "hand_dist": 0.0,
             "hand_center": None,
             "is_same_as_last_and_fast": False,
             "sent_msg": None
         }
-        
+
+    def update_debug_info(self):
+        self.debug_info['move_acc'] = self.move_acc
+        self.debug_info['flags'] = self.flags.copy()
+        self.debug_info['counts'] = self.counts.copy()
+        self.debug_info['active_buffers'] = self.collision_buffers.copy()
+
     @staticmethod
     def get_iou(box1, box2):
         """ 工具函式：計算兩框之交集 / 聯集 (IoU) """
@@ -579,6 +580,8 @@ class HandWashTracker:
             
         # 總持續時間 = 當前時間 - 開始時間點
         self.durations[step_num] = now - self.step_start_times[step_num]
+        if self.durations[step_num] > self.max_durations[step_num]:
+            self.max_durations[step_num] = self.durations[step_num]
 
     def _create_mqtt_message(self, cmd):
         if cmd == 'Reset':
@@ -608,6 +611,7 @@ class HandWashTracker:
 
     def _publish_status(self, topic, cmd):
         msg = self._create_mqtt_message(cmd)
-        if msg:
+        now = time()
+        if msg and now - self.pub_time >= self.pub_period:
             self.debug_info['sent_msg'] = self.mqtt.publish(topic, msg)
-
+            self.pub_time = now

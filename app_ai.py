@@ -56,10 +56,10 @@ class App_HandWash:
         #                                    ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
         #self.tracker_right = HandWashTracker(zone_name="Right", devices=self.device.right_data, 
         #                                     ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
-        self.tracker_left = HandWashTracker("Left", CFG['logic'], self.ai_model.classes, 
-                                            devices=None, mqtt=self.mqtt_manager)
-        self.tracker_right = HandWashTracker("Right", CFG['logic'], self.ai_model.classes, 
-                                             devices=None, mqtt=self.mqtt_manager)
+        self.tracker_left = HandWashTracker("Left", CFG['logic'], self.ai_model.classes, None, 
+                                            mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
+        self.tracker_right = HandWashTracker("Right", CFG['logic'], self.ai_model.classes, None, 
+                                             mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
 
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
