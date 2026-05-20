@@ -37,13 +37,17 @@ class HandWashTracker:
         self.pub_period = 1. / pub_freq
         self.pub_time = float('-inf')
 
+        #
+        self.is_no_hand_timeout = False
+
         self.reset()
 
     def reset(self):
         self.start_time = None
         self.flags = [0] * 12
         self.trigger_times = [""] * 12
-        self.counts = [0] * 12
+        self.counts = [0] * 12  # 歷史最高
+        self.current_counts = [0] * 12  # 當前連續
         
         for i in range(2, 7): self.counts[i] = 0
         
@@ -97,6 +101,10 @@ class HandWashTracker:
             if self.start_time and elapsed > self.cfg['no_hand_timeout']:
                 self.finish_reason = 'no hand timeout'
                 self.update_debug_info()
+                
+                # 如果 no hand timeout 的狀態沒解除, 不連續發送 reset
+                #if not self.is_no_hand_timeout:
+                #    self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
                 self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
                 return self.now_dt, self._finalize_session()
             return self.now_dt, None
@@ -597,10 +605,10 @@ class HandWashTracker:
                 return
             
             #logger.info(f'the most continuous buffers in this frame is step{step} !')
-
+            name = f'step{step}_frame_scrub_ratio'
             msgs = {
                 "step_id": f"Step{step}",
-                "washcount": str(self.counts[step - 1]),
+                "washcount": str(self.temp_continuous_collisions[step - 1] // self.cfg[name]),
                 "washtime": str(self.durations[step]),
                 "side": self.zone_name.lower()
             }
