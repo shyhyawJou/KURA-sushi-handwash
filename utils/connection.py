@@ -13,8 +13,9 @@ class MQTT:
         self.pub_topics = topic['publish']
         self.qos = qos
 
-        self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
-                                  client_id=client_id)
+        #self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
+        #                          client_id=client_id)
+        self.client = mqtt.Client(client_id=client_id)
         self.reconnect_interval = reconnect_interval
         
         # 綁定 Callback 函式
@@ -32,18 +33,18 @@ class MQTT:
         # 自動連線
         self.connect()
 
-    def _on_connect(self, client, userdata, flags, rc, properties):
+    def _on_connect(self, client, userdata, flags, rc, *args, **kwargs):
         if rc == 0:
             logger.success(f"Connected successfully to MQTT Broker [{self.broker}:{self.port}]")
             self.subscribe()
         else:
             logger.error(f"failed to connect [{self.broker}:{self.port}] with code {rc}")
 
-    def _on_connect_fail(self, client, userdata):
+    def _on_connect_fail(self, client, userdata, *args, **kwargs):
         # 因為只要斷線就會觸發, 所以控制只有第一次才會印
         logger.error(f'MQTT connection is failed! Try again after {self.reconnect_interval} (s)')
 
-    def _on_disconnect(self, client, userdata, disconnect_flags, rc, properties):
+    def _on_disconnect(self, client, userdata, rc, *args, **kwargs):
         if rc == 0:
             logger.success('disconnected to MQTT broker !')
         else:
