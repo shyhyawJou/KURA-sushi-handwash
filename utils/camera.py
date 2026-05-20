@@ -89,7 +89,7 @@ class Camera:
 
         self.capture = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
         if not self.capture.isOpened():
-            raise ValueError(f"Failed to open camera: {self.video_path}")
+            raise ValueError(f"Failed to open camera: {self.device_path}")
 
         logger.info(f"Camera initialized: {self.device_path} at {self.width}x{self.height}")
 

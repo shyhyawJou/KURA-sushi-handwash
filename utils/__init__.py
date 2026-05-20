@@ -11,3 +11,4 @@ from .plot import Result, draw_status_overlay, draw_debug_panel
 from .timer import Timer
 from .image import resize_keep_scale
 from .cfg import CFG
+from .connection import MQTT

@@ -238,8 +238,8 @@ def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offse
     # 取得文字寬高以便計算座標 (右下角)
     (text_w, text_h), baseline = cv2.getTextSize(timestamp_str, font, font_scale, thickness)
     
-    # 設定位置 (距離邊界 20 pixel)
-    x = w - text_w - 20
+    # 設定位置 (距離邊界 10 pixel)
+    x = w - text_w - 5
     y = h - 20
     
     # 1. 畫陰影 (黑色，偏移 2 pixel)
@@ -370,8 +370,11 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             #count_info = f" {d['counts'][i-1]}/{cfg['scrub_flag_count']}" if 3 <= i <= 7 else ""
             name1 = f'step{i}_frame_scrub_ratio'
             name2 = f'step{i}_min_scrub'
-            count_info = f" {d['counts'][i-1]}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else ""
-            line_text = f"Step {i}: {d['active_buffers'][i]:02d}{count_info}{suffix}"
+            duration = d['durations'][i]
+            max_duration = d['max_durations'][i]
+            active_buffers = d['active_buffers'][i]
+            count_info = f" {d['counts'][i-1]}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else "-1"
+            line_text = f"Step {i:<2}: {active_buffers:02d}{count_info} {max_duration:.1f} {suffix}"
             
             # y 座標隨 panel_height 自動計算，讓列表貼合底部
             pos_y = h - (panel_height - 30) + (i-1) * line_height
@@ -391,12 +394,65 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             bar_w = int(min(move_acc * 15, 80)) 
             cv2.rectangle(img, (start_x, h - 12), (start_x + bar_w, h - 6), (0, 255, 0), -1)
             draw_text_with_shadow(img, f"Move: {move_acc:.1f}", (start_x + 90, h - 6), (0, 255, 0), 0.3)
-    
+
+    def render_rich_mqtt_on_frame(tracker, start_x, start_y, title_color):
+        d = tracker.debug_info
+        sent_msg = d['sent_msg']
+        if not sent_msg:
+            return
+            
+        # 1. 準備 Token 縮排結構
+        msg_str = str(sent_msg).strip("'\"")
+        items = msg_str.replace("{", "").replace("}", "").split(",")
+        
+        lines = []
+        lines.append(f"● {tracker.zone_name.upper()} MQTT SENT:")
+        lines.append("{")
+        for item in items:
+            if item.strip():
+                lines.append("    " + item.strip())
+        lines.append("}")
+
+        # 2. 計算這坨字卡需要的背景寬高
+        max_w = 0
+        card_font_size = 0.30
+        card_line_height = 12
+        for line in lines:
+            w_size = cv2.getTextSize(line, font, card_font_size, 1)[0][0]
+            if w_size > max_w:
+                max_w = w_size
+                
+        card_w = max_w + 20
+        card_h = len(lines) * card_line_height + 15
+
+        # 3. 在 Frame 上畫一塊微透明黑底襯托文字，防止背景太亮干擾閱讀
+        overlay = img.copy()
+        cv2.rectangle(overlay, (start_x - 5, start_y - 12), (start_x + card_w, start_y + card_h - 10), (10, 10, 10), -1)
+        cv2.addWeighted(overlay, 0.65, img, 0.35, 0, img)
+        # 外邊框裝飾
+        cv2.rectangle(img, (start_x - 5, start_y - 12), (start_x + card_w, start_y + card_h - 10), (80, 80, 80), 1)
+
+        # 4. 逐行繪製帶縮排的文字
+        curr_y = start_y
+        for idx, line in enumerate(lines):
+            if idx == 0:
+                color = title_color # 標題使用專屬黃色/紫色
+            elif line.strip() in ("{", "}"):
+                color = (220, 220, 220) # 結構符號用白灰色
+            else:
+                color = (0, 255, 0) # 內容欄位用經典富文字綠色
+                
+            draw_text_with_shadow(img, line, (start_x, curr_y), color, 0.32)
+            curr_y += card_line_height
+
     # --- 繪製半透明背景遮罩 ---
     overlay = img.copy()
     # 遮罩高度由 panel_height 控制
     cv2.rectangle(overlay, (0, h - panel_height), (w, h), (20, 20, 20), -1)
     cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
+
+    render_rich_mqtt_on_frame(tracker_l, start_x=text_start_x_offset, start_y=25, title_color=(0, 255, 255))
+    render_rich_mqtt_on_frame(tracker_r, start_x=int(w * 0.52), start_y=25, title_color=(0, 255, 255))
 
     # 呼叫左右區域繪製 (使用 w 比例確保對齊)
     draw_zone_debug(tracker_l, text_start_x_offset)

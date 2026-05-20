@@ -14,9 +14,10 @@ streamer:
 
 AI:
     handwash:
-        #path: 'best_0.8380_0.9060_epoch_91_kura_v16_fp16.dla'
-        #path: 'best_0.8510_0.9030_epoch_56_kura_spray_alcohol_v2_fp16.dla'
-        path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7_fp16.dla'
+        #path: 'best_0.8380_0.9060_epoch_91_kura_v16.onnx'
+        #path: 'best_0.8510_0.9030_epoch_56_kura_spray_alcohol_v2.onnx'
+        #path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7.onnx'
+        path: 'best_0.9200_0.9680_epoch_8_kura_spray_alcohol_v11_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
@@ -149,7 +150,7 @@ visualization:
         text_padding: 1
     
     timestamp:
-        font_scale: 0.8
+        font_scale: 0.55
         thickness: 2
         shadow_offset: 2
 
@@ -191,7 +192,7 @@ logic:
         scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
         glove_iou_thresh: 0.2         # 手套判定門檻
         min_repeat_interval: 10       # 相同步驟連續觸發必須要超過一定秒數
-    
+
     class:
         hand:
             - 'left'
@@ -226,3 +227,16 @@ logic:
 udp:
     ip: '127.0.0.1'
     port: 10039
+
+mqtt:
+    ip: '127.0.0.1'
+    port: 1883
+    client_id: null
+    reconnect_interval: 5  # 秒
+    topic:
+        publish:
+            system: 'handwash/system'
+            process: 'handwash/process'
+        subscribe: {}
+    qos: 0
+    pub_freq: 5

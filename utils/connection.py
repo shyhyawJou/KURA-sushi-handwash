@@ -6,15 +6,16 @@ import json
 
 
 class MQTT:
-    def __init__(self, ip, port, topic, qos, client_id=None, reconnect_interval=5):
+    def __init__(self, ip, port, topic, qos, client_id=None, reconnect_interval=5, **kwargs):
         self.broker = ip
         self.port = port
         self.sub_topics = topic['subscribe']
         self.pub_topics = topic['publish']
         self.qos = qos
 
-        self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
-                                  client_id=client_id)
+        #self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
+        #                          client_id=client_id)
+        self.client = mqtt.Client(client_id=client_id)
         self.reconnect_interval = reconnect_interval
         
         # 綁定 Callback 函式
@@ -27,23 +28,28 @@ class MQTT:
         # 用來存放自訂的訊息處理邏輯
         self.message_callback = None
 
+        self.is_running = True
+
         # 自動連線
         self.connect()
 
-    def _on_connect(self, client, userdata, flags, rc, properties):
+    def _on_connect(self, client, userdata, flags, rc, *args, **kwargs):
         if rc == 0:
             logger.success(f"Connected successfully to MQTT Broker [{self.broker}:{self.port}]")
             self.subscribe()
         else:
             logger.error(f"failed to connect [{self.broker}:{self.port}] with code {rc}")
 
-    def _on_connect_fail(self, client, userdata):
+    def _on_connect_fail(self, client, userdata, *args, **kwargs):
         # 因為只要斷線就會觸發, 所以控制只有第一次才會印
         logger.error(f'MQTT connection is failed! Try again after {self.reconnect_interval} (s)')
 
-    def _on_disconnect(self, client, userdata, disconnect_flags, rc, properties):
-        logger.warning(f"Disconnected from Broker, code: {rc}, "
-                       f"connect to MQTT Broker again after {self.reconnect_interval} (s)")
+    def _on_disconnect(self, client, userdata, rc, *args, **kwargs):
+        if rc == 0:
+            logger.success('disconnected to MQTT broker !')
+        else:
+            logger.warning(f"Disconnected from Broker, code: {rc}, "
+                           f"connect to MQTT Broker again after {self.reconnect_interval} (s)")
 
     def _on_message(self, client, userdata, msg):
         # 當收到訊息時，如果外部有自訂邏輯就呼叫它
@@ -65,9 +71,10 @@ class MQTT:
 
     def disconnect(self):
         """中斷連線並停止背景迴圈"""
-        logger.info('Disconnect to MQTT Broker ...')
-        self.client.loop_stop()
+        logger.info('app ask to disconnect to MQTT Broker ...')
+        self.is_running = False
         self.client.disconnect()
+        self.client.loop_stop()
 
     def subscribe(self):
         """訂閱主題"""
@@ -84,9 +91,9 @@ class MQTT:
             # 檢查是否發送成功
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 published_msg = msg_json
-                #logger.info(f"publish {msg_json} to MQTT [{topic}]")
-            else:
-                logger.error(f"Failed to publish {msg_json} to MQTT [{topic}]")
+                logger.info(f"publish {msg_json} to MQTT [{topic}]")
+            elif self.is_running:
+                logger.error(f"Failed to publish message to MQTT [{topic}]")
         except json.JSONDecodeError:
             logger.error(f'cannot decode message: {message}')
 

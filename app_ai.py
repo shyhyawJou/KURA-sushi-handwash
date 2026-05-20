@@ -23,6 +23,7 @@ from utils import (Mjpeg_Streamer,
                    Device,
                    Result,
                    Timer,
+                   MQTT,
                    CFG)
 
 
@@ -41,6 +42,7 @@ class App_HandWash:
         self.origin_video = Video(**CFG['video']['origin'])
         self.result_video = Video(**CFG['video']['result'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
+        self.mqtt_manager = MQTT(**CFG['mqtt'])
         self.result_drawer = Result(**CFG['visualization']['result'])
         #self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
         self.device = None
@@ -50,10 +52,10 @@ class App_HandWash:
         #                                    ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
         #self.tracker_right = HandWashTracker(zone_name="Right", devices=self.device.right_data, 
         #                                     ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
-        self.tracker_left = HandWashTracker(zone_name="Left", devices=None,
-                                            ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
-        self.tracker_right = HandWashTracker(zone_name="Right", devices=None, 
-                                             ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
+        self.tracker_left = HandWashTracker("Left", CFG['logic'], self.ai_model.classes, None, 
+                                            mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
+        self.tracker_right = HandWashTracker("Right", CFG['logic'], self.ai_model.classes, None, 
+                                             mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
 
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
@@ -147,26 +149,27 @@ class App_HandWash:
                         
                         ## 畫左 devices
                         #plot_bbox(frame_copy, 
-                        #        self.device.left_bboxes,
-                        #        self.device.left_labels, 
-                        #        ([1.] * len(self.device.left_labels)), 
-                        #        self.ai_model.classes, 
-                        #        **CFG['visualization']['bbox'])
+                        #          self.device.left_bboxes,
+                        #          self.device.left_labels, 
+                        #          ([1.] * len(self.device.left_labels)), 
+                        #          self.ai_model.classes, 
+                        #          **CFG['visualization']['bbox'])
 #
                         ## 畫右 devices
                         #plot_bbox(frame_copy, 
-                        #        self.device.right_bboxes,
-                        #        self.device.right_labels, 
-                        #        [1.] * len(self.device.right_labels), 
-                        #        self.ai_model.classes, 
-                        #        **CFG['visualization']['bbox'])
+                        #          self.device.right_bboxes,
+                        #          self.device.right_labels, 
+                        #          [1.] * len(self.device.right_labels), 
+                        #          self.ai_model.classes, 
+                        #          **CFG['visualization']['bbox'])
+
+
+                        # 畫 debug
+                        draw_debug_panel(frame_copy, self.tracker_left, self.tracker_right)
 
                         # 畫時間戳
                         now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
                         draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
-
-                        #
-                        draw_debug_panel(frame_copy, self.tracker_left, self.tracker_right)
 
                     # push to streamer
                     with streamer_timer:
@@ -209,6 +212,7 @@ class App_HandWash:
         self.streamer.stop()
         self.origin_video.stop()
         self.result_video.stop()
+        self.mqtt_manager.disconnect()
 
         logger.success("release all sources !")
 
