@@ -35,7 +35,6 @@ class HandWashTracker:
         # mqtt
         self.mqtt = mqtt
         self.pub_period = 1. / pub_freq
-        self.pub_time = float('-inf')
 
         #
         self.is_no_hand_timeout = False
@@ -46,10 +45,8 @@ class HandWashTracker:
         self.start_time = None
         self.flags = [0] * 12
         self.trigger_times = [""] * 12
-        self.counts = [0] * 12  # 歷史最高
-        self.current_counts = [0] * 12  # 當前連續
-        
-        for i in range(2, 7): self.counts[i] = 0
+        self.max_counts = [0] * 12  # 歷史最高
+        self.counts = [0] * 12  # 當前連續
         
         self.step_sequence = []
         self.last_step_trigger_times = {}
@@ -69,6 +66,8 @@ class HandWashTracker:
         self.temp_continuous_collisions = [0] * 12 
         self.now_dt = None       
         self.finish_reason = None
+
+        self.pub_time = float('-inf')
 
         self._reset_scrub_vars()
 
@@ -91,6 +90,7 @@ class HandWashTracker:
         valid_hands = hands[valid_mask]
 
         if len(valid_hands) > 0:
+            self.is_no_hand_timeout = False  # 重設 flag
             self.debug_info['status'] = "Hand Detected"
             self.no_hand_start_time = self.now_dt
             if not self.start_time:
@@ -101,11 +101,10 @@ class HandWashTracker:
             if self.start_time and elapsed > self.cfg['no_hand_timeout']:
                 self.finish_reason = 'no hand timeout'
                 self.update_debug_info()
-                
                 # 如果 no hand timeout 的狀態沒解除, 不連續發送 reset
-                #if not self.is_no_hand_timeout:
-                #    self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
-                self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
+                if not self.is_no_hand_timeout:
+                    self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
+                self.is_no_hand_timeout = True  # 重設 flag
                 return self.now_dt, self._finalize_session()
             return self.now_dt, None
 
@@ -128,7 +127,7 @@ class HandWashTracker:
         if all(f == 1 for f in self.flags):
             self.finish_reason = 'all flags are 1'
             # 發送訊息給應用端
-            self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
+            self._publish_status(self.mqtt.pub_topics['system'], 'BackLogin')
             return self.now_dt, self._finalize_session()
 
         # 發送訊息給應用端
@@ -348,11 +347,11 @@ class HandWashTracker:
     #        self.temp_continuous_counts[step_num-1] += 1
     #        
     #        # 需求 10: 只有目前這波「連續次數」超過歷史最高，才更新 counts
-    #        if self.temp_continuous_counts[step_num-1] > self.counts[step_num-1]:
-    #            self.counts[step_num-1] = self.temp_continuous_counts[step_num-1]
+    #        if self.temp_continuous_counts[step_num-1] > self.max_counts[step_num-1]:
+    #            self.max_counts[step_num-1] = self.temp_continuous_counts[step_num-1]
     #            
     #        # 檢查是否達到 Flag 門檻
-    #        if self.counts[step_num-1] == self.cfg['scrub_flag_count']:
+    #        if self.max_counts[step_num-1] == self.cfg['scrub_flag_count']:
     #            self._update_record(step_num, is_gloved)
     #    else:
     #        # 動作停下來了，連續計數中斷
@@ -363,7 +362,7 @@ class HandWashTracker:
         """ 
         保留 temp_count 機制：
         temp_continuous_collisions 記錄「這一波」連續偵測到的幀數。
-        self.counts 記錄該步驟「歷史最高」的連續幀數。
+        self.max_counts 記錄該步驟「歷史最高」的連續幀數。
         """
         if detected:
             # 增加 Buffer (用於判斷是否正在觸發)
@@ -378,12 +377,12 @@ class HandWashTracker:
             
             # 需求 10：只有目前這波超過歷史最高，才更新 counts
             name = f'step{step_num}_frame_scrub_ratio'
-            current_count = self.temp_continuous_collisions[idx] // self.cfg[name]
-            if current_count > self.counts[idx]:
-                self.counts[idx] = current_count
+            self.counts[idx] = self.temp_continuous_collisions[idx] // self.cfg[name]
+            if self.counts[idx] > self.max_counts[idx]:
+                self.max_counts[idx] = self.counts[idx]
                 
             # 檢查是否達到 Flag 門檻
-            if self.counts[idx] == self.cfg[f'step{step_num}_min_scrub']:
+            if self.max_counts[idx] == self.cfg[f'step{step_num}_min_scrub']:
                 self._update_record(step_num, is_gloved)
         else:
             # 偵測中斷，該波計數歸零
@@ -509,7 +508,7 @@ class HandWashTracker:
         for i in range(1, 13):
             res[f"Step{i} flag"] = self.flags[i-1]
             res[f"Step{i} time"] = self.trigger_times[i-1]
-            res[f"Step{i} count"] = self.counts[i-1]
+            res[f"Step{i} count"] = self.max_counts[i-1]
         for i in range(3, 8):
             res[f'Step{i} min count'] = self.cfg[f'step{i}_min_scrub']
         res['Finish reason'] = self.finish_reason
@@ -523,11 +522,12 @@ class HandWashTracker:
         self.debug_info = {
             "status": "No Hand",
             "move_acc": self.move_acc,
-            "flags": self.flags.copy(),
-            "counts": self.counts.copy(),
-            "active_buffers": self.collision_buffers.copy(),
-            "durations": self.durations.copy(),
-            "max_durations": self.max_durations.copy(),
+            "flags": self.flags,
+            "counts": self.counts,
+            "max_counts": self.max_counts,
+            "active_buffers": self.collision_buffers,
+            "durations": self.durations,
+            "max_durations": self.max_durations,
             "hand_dist": 0.0,
             "hand_center": None,
             "is_same_as_last_and_fast": False,
@@ -538,6 +538,9 @@ class HandWashTracker:
         self.debug_info['move_acc'] = self.move_acc
         self.debug_info['flags'] = self.flags.copy()
         self.debug_info['counts'] = self.counts.copy()
+        self.debug_info['max_counts'] = self.max_counts.copy()
+        self.debug_info['durations'] = self.durations.copy()
+        self.debug_info['max_durations'] = self.max_durations.copy()
         self.debug_info['active_buffers'] = self.collision_buffers.copy()
 
     @staticmethod
@@ -594,6 +597,8 @@ class HandWashTracker:
     def _create_mqtt_message(self, cmd):
         if cmd == 'Reset':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
+        elif cmd == 'BackLogin':  # 12 步驟 reset
+            msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'Alarm':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'AlarmCancel':
@@ -605,10 +610,9 @@ class HandWashTracker:
                 return
             
             #logger.info(f'the most continuous buffers in this frame is step{step} !')
-            name = f'step{step}_frame_scrub_ratio'
             msgs = {
                 "step_id": f"Step{step}",
-                "washcount": str(self.temp_continuous_collisions[step - 1] // self.cfg[name]),
+                "washcount": str(self.counts[step-1]),
                 "washtime": str(self.durations[step]),
                 "side": self.zone_name.lower()
             }
