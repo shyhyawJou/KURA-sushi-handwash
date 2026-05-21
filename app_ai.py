@@ -27,6 +27,7 @@ from utils import (Mjpeg_Streamer,
                    MQTT,
                    CFG, SYS_CFG)
 
+
 VIDEO_PATH = None
 
 
@@ -136,7 +137,7 @@ class App_HandWash:
                     with frame_copy_timer:
                         frame_copy = frame.copy()
 
-                    # 5 支以上的手出現, 發出警告
+                    # 6 支以上的手出現, 發出警告
                     with alarm_timer:
                         hand_lbs = self.tracker_left.label_bare_hand + self.tracker_left.label_gloved_hand
                         mask = np.isin(pred_labels, hand_lbs)
@@ -145,15 +146,15 @@ class App_HandWash:
                         hand_scores = scores[mask]
                         ids = cv2.dnn.NMSBoxes(hands, hand_scores, 0., 0.7)
                         hand_classes = [self.ai_model.classes[i] for i in pred_labels[mask][ids]]
-                        if len(ids) >= 5 and not self.is_alarm:
+                        if len(ids) >= 6 and not self.is_alarm:
                             logger.warning(f'found {len(ids)} hands, detail: {hand_classes} !')
                             self.tracker_left._publish_status(self.mqtt_manager.pub_topics['system'], 'Alarm')
                             self.is_alarm = True
-                        elif len(ids) < 5 and self.is_alarm:
+                        elif len(ids) < 6 and self.is_alarm:
                             self.tracker_left._publish_status(self.mqtt_manager.pub_topics['system'], 'AlarmCancel')
                             self.is_alarm = False
 
-                    # 洗手檢測  
+                    # 洗手檢測
                     with handwash_timer:
                         if not self.is_alarm:
                             now, res_l = self.tracker_left.update(left_dets, frame_copy)
