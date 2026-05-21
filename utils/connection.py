@@ -82,7 +82,7 @@ class MQTT:
             self.client.subscribe(topic, qos=self.qos)
             logger.success(f"Subscribed to topic: {topic}")
 
-    def publish(self, topic, message):
+    def publish(self, topic, message, log_level):
         """發送訊息"""
         published_msg = None
         try:
@@ -91,7 +91,8 @@ class MQTT:
             # 檢查是否發送成功
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 published_msg = msg_json
-                logger.info(f"publish {msg_json} to MQTT [{topic}]")
+                level = log_level.upper()
+                logger.log(level, f"publish {msg_json} to MQTT [{topic}]")
             elif self.is_running:
                 logger.error(f"Failed to publish message to MQTT [{topic}]")
         except json.JSONDecodeError:

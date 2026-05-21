@@ -7,11 +7,12 @@ from loguru import logger
 
 
 class HandWashTracker:
-    def __init__(self, zone_name="Left", logic_cfg=None, ai_class=None, devices=None,
+    def __init__(self, zone_name, logic_cfg, sys_cfg, ai_class, devices=None,
                  mqtt = None, pub_freq=10):
         
         self.zone_name = zone_name
         self.cfg = logic_cfg['parameter']
+        self.sys_cfg = sys_cfg['stages']
         self.ai_classes = ai_class
         self.devices = devices
         
@@ -24,6 +25,7 @@ class HandWashTracker:
         ai_labels = self.logic_classes['ai_logic_labels']
         self.idx_step1_8 = ai_class.index(ai_labels['step1_8'])
         self.idx_step2 = ai_class.index(ai_labels['step2'])
+        self.idx_step7 = ai_class.index(ai_labels['step7'])
         self.idx_step9 = ai_class.index(ai_labels['step9'])
         self.idx_step10 = ai_class.index(ai_labels['step10'])
         self.idx_step11 = ai_class.index(ai_labels['step11'])
@@ -98,7 +100,7 @@ class HandWashTracker:
         else:
             self.debug_info['status'] = "No Hand"
             elapsed = (self.now_dt - self.no_hand_start_time).total_seconds()
-            if self.start_time and elapsed > self.cfg['no_hand_timeout']:
+            if self.start_time and elapsed > self.sys_cfg[0]['timeoutmax']:
                 self.finish_reason = 'no hand timeout'
                 self.update_debug_info()
                 # 如果 no hand timeout 的狀態沒解除, 不連續發送 reset
@@ -114,7 +116,8 @@ class HandWashTracker:
         self._logic_step_1_8(detections, is_gloved)
         self._logic_step_2(detections, is_gloved)
         #self._logic_step_3_7(valid_hands, detections, is_gloved)
-        self._logic_step_3_7(detections, is_gloved)
+        self._logic_step_3_6(detections, is_gloved)
+        self._logic_step_7(detections, is_gloved)
         self._logic_step_9(detections, is_gloved)
         self._logic_step_10(detections, is_gloved)
         self._logic_step_11(detections, is_gloved)
@@ -240,11 +243,11 @@ class HandWashTracker:
     #        #self.current_scrub_label = None
     #        #self._reset_scrub_vars()
 
-    def _logic_step_3_7(self, detections, is_gloved):
+    def _logic_step_3_6(self, detections, is_gloved):
         """ 
-        Step 3-7: 基於幀數的連續計數機制
+        Step 3-6: 基於幀數的連續計數機制
         """
-        # 1. 找出當前畫面中是否有屬於 Step 3-7 的 Label
+        # 1. 找出當前畫面中是否有屬於 Step 3-6 的 Label
         mask = np.isin(detections['label'], list(self.label_to_step.keys()))
         active_labels = detections['label'][mask]
 
@@ -266,7 +269,7 @@ class HandWashTracker:
             self._do_scrub_count(target_step, is_gloved, detected=True)
             
             # 重置其他步驟的 Buffer 與連續計數（嚴格模式：一次只能做一件事）
-            for s in range(3, 8):
+            for s in range(3, 7):
                 if s != target_step:
                     self.collision_buffers[s] = 0
                     self.temp_continuous_collisions[s-1] = 0
@@ -280,6 +283,18 @@ class HandWashTracker:
                 self.durations[self.current_scrub_label] = 0.0
                 self.step_start_times[self.current_scrub_label] = 0.0
             self.current_scrub_label = None
+
+    def _logic_step_7(self, detections, is_gloved):
+        """ Step 7: 基於 AI 偵測到 scrub under nails """
+        if self.idx_step7 in detections['label']:
+            self.collision_buffers[7] += 1
+            self.compute_step_duration(7)
+            if self.collision_buffers[7] == self.cfg['trigger_step7_buffer']:
+                self._update_record(7, is_gloved)
+        else:
+            self.collision_buffers[7] = 0
+            self.durations[7] = 0.0
+            self.step_start_times[7] = 0.0
 
     def _logic_step_9(self, detections, is_gloved):
         """ Step 9: 基於 AI 偵測到 wipe hands with tissue """
@@ -382,7 +397,7 @@ class HandWashTracker:
                 self.max_counts[idx] = self.counts[idx]
                 
             # 檢查是否達到 Flag 門檻
-            if self.max_counts[idx] == self.cfg[f'step{step_num}_min_scrub']:
+            if (self.max_counts[idx] == self.sys_cfg[step_num-1]['washcountmax']):
                 self._update_record(step_num, is_gloved)
         else:
             # 偵測中斷，該波計數歸零
@@ -510,8 +525,9 @@ class HandWashTracker:
             res[f"Step{i} time"] = self.trigger_times[i-1]
             res[f"Step{i} count"] = self.max_counts[i-1]
         for i in range(3, 8):
-            res[f'Step{i} min count'] = self.cfg[f'step{i}_min_scrub']
+            res[f'Step{i} min count'] = self.sys_cfg[i-1]['washcountmax']
         res['Finish reason'] = self.finish_reason
+        res['Region'] = self.zone_name.lower()
         return res
     
     def _get_utc_now(self):
@@ -624,6 +640,8 @@ class HandWashTracker:
     def _publish_status(self, topic, cmd):
         msg = self._create_mqtt_message(cmd)
         now = time()
-        if msg and now - self.pub_time >= self.pub_period:
-            self.debug_info['sent_msg'] = self.mqtt.publish(topic, msg)
-            self.pub_time = now
+        if msg and (cmd != 'status' or now - self.pub_time >= self.pub_period):
+            level = 'TRACE' if cmd == 'status' else 'INFO'
+            self.debug_info['sent_msg'] = self.mqtt.publish(topic, msg, level)
+            if cmd == 'status':
+                self.pub_time = now  # 只有及時狀態要卡發送頻率

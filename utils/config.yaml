@@ -161,10 +161,10 @@ visualization:
 
 logic:
     parameter:  # 我自己用的參數
-        # 暫時沒用
         trigger_step1_8_buffer: 20
         trigger_step2_buffer: 20
-        trigger_step3_7_buffer: 20
+        trigger_step3_6_buffer: 20
+        trigger_step7_buffer: 20
         trigger_step9_buffer: 10
         trigger_step10_buffer: 20
         trigger_step11_buffer: 20
@@ -211,15 +211,16 @@ logic:
         ai_logic_labels:
             step1_8: 'handwash'
             step2: 'trigger soap dispenser'
+            step7: 'scrub under nails'
             step9: 'wipe hands with tissue'
             step10: 'UV sterilization'
             step11: 'spray alcohol'
-        handwash:
+        handwash:  # 計算搓洗次數的步驟
             - 'palm to palm'
             - 'palm over back'
             - 'interlaced fingers'
             - 'thumb or wrist scrub'
-            - 'scrub under nails'
+            #- 'scrub under nails'
         #nail brush:
         #    - 'nail brush'
         #paper towel:

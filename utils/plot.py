@@ -314,6 +314,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
     def draw_zone_debug(tracker, start_x):
         d = tracker.debug_info
         cfg = tracker.cfg
+        sys_cfg = tracker.sys_cfg
         
         # 1. 狀態標頭 (位置隨 panel_height 自動連動)
         status_color = (0, 255, 255) if d['status'] == "Hand Detected" else (150, 150, 150)
@@ -322,21 +323,20 @@ def draw_debug_panel(img, tracker_l, tracker_r):
 
         for i in range(1, 13):
             is_done = d['flags'][i-1] == 1
-            # 判斷當前是否正在執行該動作 (Buffer 累積中或正在搓洗)
             is_active = d['active_buffers'][i] > 0
-           
+
             # 判斷是否為「觸發當下」(門檻值達標那一幀)
             is_trigger_moment = False
-            if 3 <= i <= 7:
+            if 3 <= i <= 6:
                 #if d['counts'][i-1] >= cfg['scrub_flag_count'] and is_active:
                 #    is_trigger_moment = True
-                name = f'step{i}_min_scrub'
+                #name = f'step{i}_min_scrub'
                 #if d['active_buffers'][i] >= cfg[name] and is_active:
                 #    is_trigger_moment = True
-                if d['counts'][i-1] >= cfg[name] and is_active:
+                if d['counts'][i-1] >= sys_cfg[i-1]['washcountmax'] and is_active:
                     is_trigger_moment = True
             else:
-                # 非搓洗步驟通常以 Buffer 10 為門檻
+                # 不用 count 的步驟
                 name = 'trigger_step1_8_buffer' if i in {1, 8} else f'trigger_step{i}_buffer'
                 if d['active_buffers'][i] >= cfg[name] and is_active:
                     is_trigger_moment = True
@@ -369,7 +369,8 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             # 繪製文字與背景
             #count_info = f" {d['counts'][i-1]}/{cfg['scrub_flag_count']}" if 3 <= i <= 7 else ""
             name1 = f'step{i}_frame_scrub_ratio'
-            name2 = f'step{i}_min_scrub'
+            #name2 = f'step{i}_min_scrub'
+            count_limit = sys_cfg[i-1]['washcountmax']
             duration = d['durations'][i]
             max_duration = d['max_durations'][i]
             active_buffers = d['active_buffers'][i]
@@ -377,7 +378,8 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             max_counts = d['max_counts'][i-1]
             #count_info = f" {d['counts'][i-1]}" if 3 <= i <= 7 else "-1"
             #line_text = f"Step {i:<2}: {count_info} {max_duration:.1f} {suffix}"
-            count_info = f" {counts}/{max_counts}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else " -1"
+            #count_info = f" {counts}/{max_counts}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else " -1"
+            count_info = f" {counts}/{max_counts}/{cfg[name1]}/{count_limit}" if 3 <= i <= 7 else " -1"
             line_text = f"Step {i:<2}: {active_buffers:02d}{count_info} {duration:.1f} {suffix}"
             
             # y 座標隨 panel_height 自動計算，讓列表貼合底部

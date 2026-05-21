@@ -9,6 +9,7 @@ from time import time
 from datetime import datetime
 from pathlib import Path as p
 import re
+import cv2
 import numpy as np
 import socket
 from utils import (Mjpeg_Streamer, 
@@ -24,7 +25,7 @@ from utils import (Mjpeg_Streamer,
                    Result,
                    Timer,
                    MQTT,
-                   CFG)
+                   CFG, SYS_CFG)
 
 
 VIDEO_PATH = None
@@ -46,15 +47,16 @@ class App_HandWash:
         self.result_drawer = Result(**CFG['visualization']['result'])
         #self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
         self.device = None
+        self.is_alarm = False
 
         # 檢測洗手
         #self.tracker_left = HandWashTracker(zone_name="Left", devices=self.device.left_data,
         #                                    ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
         #self.tracker_right = HandWashTracker(zone_name="Right", devices=self.device.right_data, 
         #                                     ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
-        self.tracker_left = HandWashTracker("Left", CFG['logic'], self.ai_model.classes, None, 
+        self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, None, 
                                             mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
-        self.tracker_right = HandWashTracker("Right", CFG['logic'], self.ai_model.classes, None, 
+        self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, None, 
                                              mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
 
         signal.signal(signal.SIGINT, self.handle_exit)
@@ -78,6 +80,7 @@ class App_HandWash:
             frame_copy_timer = Timer('frame copy', silent=True)
             streamer_timer = Timer('push frame to streamer', silent=True)
             video_timer = Timer('write frame to video', silent=True)
+            alarm_timer = Timer('find hands and alarm', silent=True)
 
             logger.info("Main loop started.")
         except:
@@ -121,15 +124,33 @@ class App_HandWash:
                     with frame_copy_timer:
                         frame_copy = frame.copy()
 
+                    # 6 支以上的手出現, 發出警告
+                    with alarm_timer:
+                        hand_lbs = self.tracker_left.label_bare_hand + self.tracker_left.label_gloved_hand
+                        mask = np.isin(pred_labels, hand_lbs)
+                        hands = boxes[mask].copy()
+                        hands[:, 2:4] -= hands[:, 0:2]
+                        hand_scores = scores[mask]
+                        ids = cv2.dnn.NMSBoxes(hands, hand_scores, 0., 0.7)
+                        hand_classes = [self.ai_model.classes[i] for i in pred_labels[mask][ids]]
+                        if len(ids) >= 6 and not self.is_alarm:
+                            logger.warning(f'found {len(ids)} hands, detail: {hand_classes} !')
+                            self.tracker_left._publish_status(self.mqtt_manager.pub_topics['system'], 'Alarm')
+                            self.is_alarm = True
+                        elif len(ids) < 6 and self.is_alarm:
+                            self.tracker_left._publish_status(self.mqtt_manager.pub_topics['system'], 'AlarmCancel')
+                            self.is_alarm = False
+
                     # 洗手檢測
                     with handwash_timer:
-                        now, res_l = self.tracker_left.update(left_dets, frame_copy)
-                        if res_l: 
-                            self.csv_manager.write_record(res_l)
+                        if not self.is_alarm:
+                            now, res_l = self.tracker_left.update(left_dets, frame_copy)
+                            if res_l: 
+                                self.csv_manager.write_record(res_l)
 
-                        now, res_r = self.tracker_right.update(right_dets, frame_copy)
-                        if res_r: 
-                            self.csv_manager.write_record(res_r)
+                            now, res_r = self.tracker_right.update(right_dets, frame_copy)
+                            if res_r: 
+                                self.csv_manager.write_record(res_r)
 
                     # visualization
                     with draw_result_timer:
@@ -184,6 +205,7 @@ class App_HandWash:
                 MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{read_frame_timer.name}] {read_frame_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{split_timer.name}] {split_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{alarm_timer.name}] {alarm_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{ai_timer.name}] {ai_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{handwash_timer.name}] {handwash_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{draw_result_timer.name}] {draw_result_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
