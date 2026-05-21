@@ -140,11 +140,11 @@ visualization:
         num_block: 2
 
 logic:
-    parameter:
-        # 暫時沒用
+    parameter:  # 我自己用的參數
         trigger_step1_8_buffer: 20
         trigger_step2_buffer: 20
-        trigger_step3_7_buffer: 20
+        trigger_step3_6_buffer: 20
+        trigger_step7_buffer: 20
         trigger_step9_buffer: 10
         trigger_step10_buffer: 20
         trigger_step11_buffer: 20
@@ -173,6 +173,9 @@ logic:
         glove_iou_thresh: 0.2         # 手套判定門檻
         min_repeat_interval: 10       # 相同步驟連續觸發必須要超過一定秒數
 
+    # 前端和我共用的參數
+    system_parameter: 'wash_steps.json'
+
     class:
         hand:
             - 'left'
@@ -188,15 +191,16 @@ logic:
         ai_logic_labels:
             step1_8: 'handwash'
             step2: 'trigger soap dispenser'
+            step7: 'scrub under nails'
             step9: 'wipe hands with tissue'
             step10: 'UV sterilization'
             step11: 'spray alcohol'
-        handwash:
+        handwash:  # 計算搓洗次數的步驟
             - 'palm to palm'
             - 'palm over back'
             - 'interlaced fingers'
             - 'thumb or wrist scrub'
-            - 'scrub under nails'
+            #- 'scrub under nails'
         #nail brush:
         #    - 'nail brush'
         #paper towel:
