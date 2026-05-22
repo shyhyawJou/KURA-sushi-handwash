@@ -25,6 +25,7 @@ from utils import (Mjpeg_Streamer,
                    Result,
                    Timer,
                    MQTT,
+                   Visualization,
                    CFG, SYS_CFG)
 
 
@@ -42,13 +43,14 @@ class App_HandWash:
         CFG['csv']['output_path'] = VIDEO_PATH.with_suffix('.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
-        self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.ai_model = RTMDet_ONNX(**CFG['AI']['handwash'])
+        self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.origin_video = Video(**CFG['video']['origin'])
         self.result_video = Video(**CFG['video']['result'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.mqtt_manager = MQTT(**CFG['mqtt'])
-        self.result_drawer = Result(**CFG['visualization']['result'])
+        self.draw_manager = Visualization(CFG)
+        #self.result_drawer = Result(**CFG['visualization']['result'])
         #self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
         self.device = None
         self.is_alarm = False
@@ -213,6 +215,7 @@ class App_HandWash:
                     with video_timer:
                         self.origin_video.write_frame(frame)
                         self.result_video.write_frame(frame_copy)
+                        #self.draw_manager.put(frame_copy, now, scores, boxes, pred_labels)
 
                 # log time elapsed
                 MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
@@ -249,6 +252,7 @@ class App_HandWash:
         self.streamer.stop()
         self.origin_video.stop()
         self.result_video.stop()
+        #self.draw_manager.stop()
         self.mqtt_manager.disconnect()
 
         logger.success("release all sources !")

@@ -2,6 +2,14 @@ import cv2
 import numpy as np
 from typing import Sequence
 from loguru import logger
+from queue import Queue, Full
+import traceback
+from time import sleep
+from threading import Thread
+from .logger import MY_LOGGER
+from .timer import Timer
+from .streamer import Mjpeg_Streamer
+from .video import Video
 
 
 
@@ -81,6 +89,70 @@ DISTANCE_COLOR = [
     (128, 128, 128),  # 19. 灰色 (Gray)
     (30, 105, 210)    # 20. 巧克力色 (Chocolate)
 ]
+
+
+class Visualization:
+    def __init__(self, cfg):
+        self.streamer = Mjpeg_Streamer(**cfg['streamer'])
+        self.origin_video = Video(**cfg['video']['origin'])
+        self.result_video = Video(**cfg['video']['result'])
+        self.thread = None
+        self.is_running = True
+        self.cfg = cfg
+        self.frame_q = Queue(256)
+
+    def put(self, frame, now, boxes, pred_labels, scores):
+        try:
+            self.frame_q.put_nowait((frame, now, boxes, pred_labels, scores))
+        except Full:
+            pass
+        except:
+            logger.error(traceback.format_exc())
+    
+    def _run(self):
+        logger.info('開始執行 draw frame 的執行緒 !')
+    
+        while self.is_running:
+            frame, now, boxes, pred_labels, scores = self.frame_q.get()
+
+            # 畫 detections
+            plot_bbox(frame, 
+                        boxes,
+                        pred_labels, 
+                        scores, 
+                        self.ai_model.classes, 
+                        **self.cfg['visualization']['bbox'])
+                    
+            # 畫 debug
+            draw_debug_panel(frame, self.tracker_left, self.tracker_right)
+
+            # 畫時間戳
+            now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
+            draw_timestamp(frame, now_str, **self.cfg['visualization']['timestamp'])
+
+            # push to streamer
+            self.streamer.push_frame(frame)
+            
+            # write frame into video
+            self.origin_video.write_frame(frame)
+            self.result_video.write_frame(frame)
+
+            sleep(0.005)
+
+        logger.info('結束執行繪製 frame 的執行緒 !')
+
+    def start(self):
+        self.thread = Thread(target=self._run)
+        self.thread.start()
+
+    def stop(self):
+        self.is_running = False
+        if self.thread:
+            self.thread.join(2.)
+        self.streamer.stop()
+        self.origin_video.stop()
+        self.result_video.stop()
+        logger.success(f'已釋放 draw frame 的所有資源 !')
 
 
 class Result:
@@ -432,9 +504,9 @@ def draw_debug_panel(img, tracker_l, tracker_r):
         card_h = len(lines) * card_line_height + 15
 
         # 3. 在 Frame 上畫一塊微透明黑底襯托文字，防止背景太亮干擾閱讀
-        overlay = img.copy()
-        cv2.rectangle(overlay, (start_x - 5, start_y - 12), (start_x + card_w, start_y + card_h - 10), (10, 10, 10), -1)
-        cv2.addWeighted(overlay, 0.65, img, 0.35, 0, img)
+        #overlay = img.copy()
+        cv2.rectangle(img, (start_x - 5, start_y - 12), (start_x + card_w, start_y + card_h - 10), (10, 10, 10), -1)
+        #cv2.addWeighted(img, 0.65, img, 0.35, 0, img)
         # 外邊框裝飾
         cv2.rectangle(img, (start_x - 5, start_y - 12), (start_x + card_w, start_y + card_h - 10), (80, 80, 80), 1)
 
@@ -452,10 +524,10 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             curr_y += card_line_height
 
     # --- 繪製半透明背景遮罩 ---
-    overlay = img.copy()
+    #overlay = img.copy()
     # 遮罩高度由 panel_height 控制
-    cv2.rectangle(overlay, (0, h - panel_height), (w, h), (20, 20, 20), -1)
-    cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
+    #cv2.rectangle(img, (0, h - panel_height), (w, h), (20, 20, 20), -1)
+    #cv2.addWeighted(img, 0.7, img, 0.3, 0, img)
 
     render_rich_mqtt_on_frame(tracker_l, start_x=text_start_x_offset, start_y=25, title_color=(0, 255, 255))
     render_rich_mqtt_on_frame(tracker_r, start_x=int(w * 0.52), start_y=25, title_color=(0, 255, 255))
