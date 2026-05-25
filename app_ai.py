@@ -28,6 +28,8 @@ from utils import (Mjpeg_Streamer,
                    Visualization,
                    CFG, SYS_CFG)
 
+# 1. 搓洗秒數不累計
+
 
 VIDEO_PATH = None
 

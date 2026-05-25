@@ -19,7 +19,9 @@ AI:
         #path: 'best_0.8380_0.9060_epoch_91_kura_v16.onnx'
         #path: 'best_0.8510_0.9030_epoch_56_kura_spray_alcohol_v2.onnx'
         #path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7.onnx'
-        path: 'best_0.9200_0.9680_epoch_8_kura_spray_alcohol_v11.onnx'
+        #path: 'best_0.9200_0.9680_epoch_8_kura_spray_alcohol_v11.onnx'
+        #path: 'best_0.9160_0.9700_epoch_5_kura_spray_alcohol_v13.onnx'
+        path: 'best_0.9220_0.9700_epoch_11_kura_spray_alcohol_v14.onnx'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
