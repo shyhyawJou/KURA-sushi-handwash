@@ -28,7 +28,6 @@ from utils import (Mjpeg_Streamer,
                    Visualization,
                    CFG, SYS_CFG)
 
-# 1. 搓洗秒數不累計
 
 
 VIDEO_PATH = None
@@ -171,12 +170,6 @@ class App_HandWash:
 
                     # visualization
                     with draw_result_timer:
-                        #current_steps = [f'step {self.tracker_left.current_step}, {self.tracker_left.buffer_count}', 
-                        #                 f'step {self.tracker_right.current_step}, {self.tracker_right.buffer_count}']
-                        #self.result_drawer.draw_step(frame_copy, current_steps)
-                        #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in left_dets]), 'L')
-                        #self.result_drawer.draw_region(frame_copy, np.asarray([d['box'] for d in right_dets]), 'R')
-
                         # 畫 detections
                         plot_bbox(frame_copy, 
                                   boxes,
@@ -256,7 +249,7 @@ class App_HandWash:
         self.result_video.stop()
         #self.draw_manager.stop()
         self.mqtt_manager.disconnect()
-
+        logger.info(f'CSV path: {self.csv_manager.file_path}')
         logger.success("release all sources !")
 
 

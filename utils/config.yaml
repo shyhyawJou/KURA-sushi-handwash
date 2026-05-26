@@ -143,7 +143,7 @@ visualization:
 
 logic:
     parameter:  # 我自己用的參數
-        trigger_step1_8_buffer: 20
+        trigger_step1_8_buffer: 30
         trigger_step2_buffer: 20
         trigger_step3_6_buffer: 20
         trigger_step7_buffer: 20
@@ -174,6 +174,8 @@ logic:
         scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
         glove_iou_thresh: 0.2         # 手套判定門檻
         min_repeat_interval: 10       # 相同步驟連續觸發必須要超過一定秒數
+
+        time_scale: 0.1666            # 因為 server 跑速快很多
 
     # 前端和我共用的參數
     system_parameter: 'wash_steps.json'
@@ -225,4 +227,4 @@ mqtt:
             process: 'handwash/process'
         subscribe: {}
     qos: 0
-    pub_freq: 5
+    pub_freq: 150
