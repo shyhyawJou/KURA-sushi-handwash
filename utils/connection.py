@@ -1,32 +1,31 @@
 import paho.mqtt.client as mqtt
 import time
+import traceback
 from loguru import logger
 import json
 
 
 
 class MQTT:
-    def __init__(self, ip, port, topic, qos, client_id=None, reconnect_interval=5, **kwargs):
+    def __init__(self, ip, port, topic, qos, client_id=None, reconnect_interval=5, 
+                 sub_cmds=None, callbacks=None, **kwargs):
         self.broker = ip
         self.port = port
         self.sub_topics = topic['subscribe']
         self.pub_topics = topic['publish']
+        self.sub_cmds = set(sub_cmds) if sub_cmds is not None else None
         self.qos = qos
+        self.reconnect_interval = reconnect_interval
+        self.callbacks = callbacks
 
         #self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, 
         #                          client_id=client_id)
-        self.client = mqtt.Client(client_id=client_id)
-        self.reconnect_interval = reconnect_interval
-        
-        # 綁定 Callback 函式
+        self.client = mqtt.Client(client_id=client_id)        
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
         self.client.reconnect_delay_set(min_delay=reconnect_interval, max_delay=30)
         self.client.on_connect_fail = self._on_connect_fail
-
-        # 用來存放自訂的訊息處理邏輯
-        self.message_callback = None
 
         self.is_running = True
 
@@ -52,12 +51,23 @@ class MQTT:
                            f"connect to MQTT Broker again after {self.reconnect_interval} (s)")
 
     def _on_message(self, client, userdata, msg):
-        # 當收到訊息時，如果外部有自訂邏輯就呼叫它
-        payload = msg.payload.decode("utf-8")
-        if self.message_callback:
-            self.message_callback(msg.topic, payload)
-        else:
+        try:
+            payload = msg.payload.decode("utf-8")
+            cmd = json.loads(payload)
+            if cmd['cmd'] not in self.sub_cmds:
+                return
             logger.info(f"MQTT [{msg.topic}] received: {payload}")
+            if self.callbacks is None:
+                return
+
+            side = cmd['side'].lower()
+            if cmd['cmd'] == 'ResetFinish':
+                self.callbacks['ResetFinish'][side](cmd)
+            elif cmd['cmd'] == 'Login':
+                self.callbacks['Login'](cmd)
+        except:
+            logger.error(f"{traceback.format_exc()}, "
+                         f"MQTT [{msg.topic}] received: {payload}")
 
     def connect(self):
         """建立連線並啟動背景迴圈"""
@@ -99,3 +109,7 @@ class MQTT:
             logger.error(f'cannot decode message: {message}')
 
         return published_msg
+    
+    def add_callbacks(self, callbacks):
+        self.callbacks = callbacks
+        logger.success('MQTT add callbacks !')

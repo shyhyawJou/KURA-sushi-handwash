@@ -18,6 +18,7 @@ AI:
         #path: 'best_0.8510_0.9030_epoch_56_kura_spray_alcohol_v2.onnx'
         #path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7.onnx'
         path: 'best_0.9200_0.9680_epoch_8_kura_spray_alcohol_v11_fp16.dla'
+        path: 'best_0.9220_0.9700_epoch_11_kura_spray_alcohol_v14_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
@@ -161,7 +162,7 @@ visualization:
 
 logic:
     parameter:  # 我自己用的參數
-        trigger_step1_8_buffer: 20
+        trigger_step1_8_buffer: 30
         trigger_step2_buffer: 20
         trigger_step3_6_buffer: 20
         trigger_step7_buffer: 20
@@ -192,6 +193,12 @@ logic:
         scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
         glove_iou_thresh: 0.2         # 手套判定門檻
         min_repeat_interval: 10       # 相同步驟連續觸發必須要超過一定秒數
+
+    # 秒數相關
+    time_parameter:
+        time_scale: 1.                # 因為 server 跑速快很多
+        trigger_pause: 1.0            # trigger 後多久切到下一步驟
+        pub_no_hand_delay: 1.0        # 連續幾秒沒手後才開始通知系統
 
     # 前端和我共用的參數
     system_parameter: '/mnt/reserved/Flet/assets/Json/wash_steps.json'
@@ -241,6 +248,10 @@ mqtt:
         publish:
             system: 'handwash/system'
             process: 'handwash/process'
-        subscribe: {}
+        subscribe:
+            system: 'handwash/system'
+    sub_cmds:  # 訂閱的指令
+        - 'Login'
+        - 'ResetFinish'
     qos: 0
-    pub_freq: 5
+    pub_freq: 10

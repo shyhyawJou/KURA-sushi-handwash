@@ -307,12 +307,14 @@ def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offse
     h, w = img.shape[:2]
     font = cv2.FONT_HERSHEY_SIMPLEX
     
-    # 取得文字寬高以便計算座標 (右下角)
+    # 取得文字寬高以便計算座標
     (text_w, text_h), baseline = cv2.getTextSize(timestamp_str, font, font_scale, thickness)
     
     # 設定位置 (距離邊界 10 pixel)
-    x = w - text_w - 5
-    y = h - 20
+    #x = w - text_w - 5
+    #y = h - 20
+    x = 10
+    y = text_h + 10
     
     # 1. 畫陰影 (黑色，偏移 2 pixel)
     shadow_offset = 2
@@ -387,7 +389,12 @@ def draw_debug_panel(img, tracker_l, tracker_r):
         d = tracker.debug_info
         cfg = tracker.cfg
         sys_cfg = tracker.sys_cfg
-        
+
+        # step
+        completed_step = d['completed_step']
+        draw_text_with_shadow(img, f'completed step: {completed_step}',
+                              (start_x, h - panel_height + 3), (0, 255, 0), 0.35, 1)
+
         # 1. 狀態標頭 (位置隨 panel_height 自動連動)
         status_color = (0, 255, 255) if d['status'] == "Hand Detected" else (150, 150, 150)
         draw_text_with_shadow(img, f"[{tracker.zone_name}] {d['status']}", 
@@ -442,8 +449,9 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             #count_info = f" {d['counts'][i-1]}/{cfg['scrub_flag_count']}" if 3 <= i <= 7 else ""
             name1 = f'step{i}_frame_scrub_ratio'
             #name2 = f'step{i}_min_scrub'
-            count_limit = sys_cfg[i-1]['washcountmax']
+            min_count = sys_cfg[i-1]['washcountmax']
             duration = d['durations'][i]
+            min_duration = sys_cfg[i-1]['washtimemax']
             max_duration = d['max_durations'][i]
             active_buffers = d['active_buffers'][i]
             counts = d['counts'][i-1]
@@ -451,8 +459,9 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             #count_info = f" {d['counts'][i-1]}" if 3 <= i <= 7 else "-1"
             #line_text = f"Step {i:<2}: {count_info} {max_duration:.1f} {suffix}"
             #count_info = f" {counts}/{max_counts}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else " -1"
-            count_info = f" {counts}/{max_counts}/{cfg[name1]}/{count_limit}" if 3 <= i <= 7 else " -1"
-            line_text = f"Step {i:<2}: {active_buffers:02d}{count_info} {duration:.1f} {suffix}"
+            count_info = f" {counts}/{max_counts}/{cfg[name1]}/{min_count}" if 3 <= i <= 7 else " -1"
+            duration_info = f' {duration:.1f}/{min_duration:.2f}'
+            line_text = f"Step {i:<2}: {active_buffers:02d}{count_info}{duration_info} {suffix}"
             
             # y 座標隨 panel_height 自動計算，讓列表貼合底部
             pos_y = h - (panel_height - 30) + (i-1) * line_height
@@ -523,12 +532,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             draw_text_with_shadow(img, line, (start_x, curr_y), color, 0.32)
             curr_y += card_line_height
 
-    # --- 繪製半透明背景遮罩 ---
-    #overlay = img.copy()
-    # 遮罩高度由 panel_height 控制
-    #cv2.rectangle(img, (0, h - panel_height), (w, h), (20, 20, 20), -1)
-    #cv2.addWeighted(img, 0.7, img, 0.3, 0, img)
-
+    # 畫 mqtt 訊息 
     render_rich_mqtt_on_frame(tracker_l, start_x=text_start_x_offset, start_y=25, title_color=(0, 255, 255))
     render_rich_mqtt_on_frame(tracker_r, start_x=int(w * 0.52), start_y=25, title_color=(0, 255, 255))
 
