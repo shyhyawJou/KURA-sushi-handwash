@@ -175,7 +175,11 @@ logic:
         glove_iou_thresh: 0.2         # 手套判定門檻
         min_repeat_interval: 10       # 相同步驟連續觸發必須要超過一定秒數
 
+    # 秒數相關
+    time_parameter:
         time_scale: 0.1666            # 因為 server 跑速快很多
+        trigger_pause: 1.0            # trigger 後多久切到下一步驟
+        pub_no_hand_delay: 1.0        # 連續幾秒沒手後才開始通知系統
 
     # 前端和我共用的參數
     system_parameter: 'wash_steps.json'
@@ -225,6 +229,10 @@ mqtt:
         publish:
             system: 'handwash/system'
             process: 'handwash/process'
-        subscribe: {}
+        subscribe:
+            system: 'handwash/system'
+    sub_cmds:  # 訂閱的指令
+        - 'Login'
+        - 'ResetFinish'
     qos: 0
     pub_freq: 150

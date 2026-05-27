@@ -5,7 +5,7 @@ import traceback
 import socket
 from loguru import logger
 from tqdm import tqdm
-from time import time
+from time import time, sleep
 from datetime import datetime
 from pathlib import Path as p
 import re
@@ -29,7 +29,6 @@ from utils import (Mjpeg_Streamer,
                    CFG, SYS_CFG)
 
 
-
 VIDEO_PATH = None
 
 
@@ -50,7 +49,7 @@ class App_HandWash:
         self.result_video = Video(**CFG['video']['result'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.mqtt_manager = MQTT(**CFG['mqtt'])
-        self.draw_manager = Visualization(CFG)
+        #self.draw_manager = Visualization(CFG)
         #self.result_drawer = Result(**CFG['visualization']['result'])
         #self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
         self.device = None
@@ -65,9 +64,25 @@ class App_HandWash:
                                             mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
         self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, None, 
                                              mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
+        self.is_left_login = False
+        self.is_right_login = False
+        self.is_ai_login = True
 
+        # mqtt callback
+        callbacks = {
+            #'ResetFinish': {'left': self.tracker_left._no_hand_callback, 
+            #               'right': self.tracker_right._no_hand_callback},
+            'Login': self._login_callback
+        }
+        self.mqtt_manager.add_callbacks(callbacks)
+        
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
+
+        if not self.is_left_login:
+            logger.warning('[Left] current state is logout !')
+        if not self.is_right_login:
+            logger.warning('[Right] current state is logout !')
 
         logger.success('all init succeeded !')
 
@@ -103,7 +118,7 @@ class App_HandWash:
                     # read frame
                     with read_frame_timer:
                         ret, frame = self.camera.get_latest_frame()
-
+                    
                     pbar.update(1)
 
                     if ret is None:
@@ -112,7 +127,15 @@ class App_HandWash:
                     elif ret is False:
                         logger.error(f"{VIDEO_PATH} stop at {pbar.n} frame !")
                         break
-                                            
+                    
+                    #cv2.imshow('aaa', frame)
+                    #cv2.waitKey(1)
+
+                    # 如果左右都沒登入
+                    if not self.is_ai_login and not self.is_left_login and not self.is_right_login:
+                        sleep(0.01)
+                        continue
+                         
                     # AI Inference
                     with ai_timer:
                         scores, boxes, pred_labels = self.ai_model(frame)
@@ -159,14 +182,27 @@ class App_HandWash:
 
                     # 洗手檢測
                     with handwash_timer:
-                        if not self.is_alarm:
-                            now, res_l = self.tracker_left.update(left_dets, frame_copy)
+                        if not self.is_alarm and (self.is_left_login or self.is_ai_login):
+                            now, res_l, trigger_logout = self.tracker_left.update(
+                                left_dets, 
+                                frame_copy
+                            )
                             if res_l: 
                                 self.csv_manager.write_record(res_l)
-
-                            now, res_r = self.tracker_right.update(right_dets, frame_copy)
-                            if res_r: 
+                            if trigger_logout:
+                                self.is_left_login = False
+                                logger.warning('[Left] Logout, Stop detection !')
+                        
+                        if not self.is_alarm and (self.is_right_login or self.is_ai_login):
+                            now, res_r, trigger_logout = self.tracker_right.update(
+                                right_dets, 
+                                frame_copy
+                            )
+                            if res_r:
                                 self.csv_manager.write_record(res_r)
+                            if trigger_logout:
+                                self.is_right_login = False
+                                logger.warning('[Right] Logout, Stop detection !')
 
                     # visualization
                     with draw_result_timer:
@@ -251,6 +287,22 @@ class App_HandWash:
         self.mqtt_manager.disconnect()
         logger.info(f'CSV path: {self.csv_manager.file_path}')
         logger.success("release all sources !")
+
+    def _login_callback(self, msg):
+        try:
+            cmd = msg['cmd']
+            side = msg['side'].lower()
+            if cmd == 'Login':
+                if side == 'left':
+                    self.is_left_login = True
+                    logger.info('[Left] Login, Begin detection !')
+                elif side == 'right':
+                    self.is_right_login = True
+                    logger.info('[Right] Login, Begin detection !')
+                else:
+                    logger.error(f'Unknown Login message: {msg}')
+        except:
+            logger.error(traceback.format_exc())
 
 
 def get_sort_key(path_obj):

@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.linalg import norm as np_norm
 from datetime import datetime, timezone
-from time import time
+from time import time, sleep
 from loguru import logger
 
 
@@ -12,6 +12,7 @@ class HandWashTracker:
         
         self.zone_name = zone_name
         self.cfg = logic_cfg['parameter']
+        self.time_cfg = logic_cfg['time_parameter']
         self.sys_cfg = sys_cfg['stages']
         self.ai_classes = ai_class
         self.devices = devices
@@ -39,7 +40,7 @@ class HandWashTracker:
         self.pub_period = 1. / pub_freq
 
         #
-        self.is_no_hand_timeout = False
+        #self.is_no_hand = False
 
         self.reset()
 
@@ -64,9 +65,11 @@ class HandWashTracker:
         self.scrub_frame_counter = 0
         
         self.no_hand_start_time = datetime.now(timezone.utc)
+        self.no_hand_elapsed = 0.
+        self.step_trigger_time = None
         self.has_soaped = False 
         self.temp_continuous_collisions = [0] * 12 
-        self.now_dt = None       
+        self.now_dt = datetime.now(timezone.utc)       
         self.finish_reason = None
 
         self.detecting_step = 1
@@ -74,6 +77,11 @@ class HandWashTracker:
         self.pub_time = float('-inf')
 
         self._reset_scrub_vars()
+        self._clear_debug_info()
+
+        self.is_ai_login = False  # 給 ai login 用
+        self.is_no_hand_timeout = True
+        self.is_logout_countdown = False 
 
     def update(self, detections, img):
         self.now_dt = datetime.now(timezone.utc)
@@ -83,6 +91,21 @@ class HandWashTracker:
         h, w = img.shape[:2]
         frame_area = h * w
         
+        trigger_logout = False
+
+        # 切換 step
+        if self.step_trigger_time is not None:
+            elapsed = (self.now_dt - self.step_trigger_time).total_seconds()
+            if elapsed < self.time_cfg['trigger_pause']:
+                return self.now_dt, None, trigger_logout
+            else:
+                self.step_trigger_time = None
+                self.detecting_step += 1
+                logger.info(f'[{self.zone_name}] detecting step become {self.detecting_step} !')
+                if 1 <= self.detecting_step <= 12:
+                    self._publish_status(self.mqtt.pub_topics['process'], 'status', 
+                                         fatal=True, is_switch_step=True)
+
         # 1. 抓出手部與過濾
         hand_mask = np.isin(detections['label'], self.label_bare_hand + self.label_gloved_hand)
         hands = detections['box'][hand_mask]
@@ -92,7 +115,15 @@ class HandWashTracker:
         valid_hands = hands[valid_mask]
 
         if len(valid_hands) > 0:
-            self.is_no_hand_timeout = False  # 重設 flag
+            #self.is_no_hand = False
+            self.no_hand_elapsed = 0.
+            if self.is_no_hand_timeout:
+                self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
+                self.is_no_hand_timeout = False  # 重設 flag
+                self.is_ai_login = True
+            elif self.is_logout_countdown:
+                self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
+                self.is_logout_countdown = False
             self.debug_info['status'] = "Hand Detected"
             self.no_hand_start_time = self.now_dt
             if not self.start_time:
@@ -101,19 +132,35 @@ class HandWashTracker:
             self.debug_info['status'] = "No Hand"
             self.step_start_times = {i: 0.0 for i in range(1, 13)}  # reset
             # 正在進行中的步驟允許短暫沒手
-            for i in range(self.detecting_step + 1, 14):
+            for i in range(self.detecting_step + 1, 13):
                 self.collision_buffers[i] = 0
                 self.durations[i] = 0.0
-            elapsed = (self.now_dt - self.no_hand_start_time).total_seconds()
-            if self.start_time and elapsed > self.sys_cfg[self.detecting_step-1]['timeoutmax']:
+            
+            #if not self.is_no_hand:  # 第一次發生 no hand 才發送
+            #    self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=True)
+            #    self.is_no_hand = True
+
+            self.no_hand_elapsed = (self.now_dt - self.no_hand_start_time).total_seconds()
+            max_time = self.sys_cfg[self.detecting_step-1]['timeoutmax']
+            if max_time > self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay']:
+                self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
+                self.is_logout_countdown = True
+            elif self.start_time and self.no_hand_elapsed >= max_time:
                 self.finish_reason = 'no hand timeout'
-                self.update_debug_info()
-                # 如果 no hand timeout 的狀態沒解除, 不連續發送 reset
+                # 如果觸發 no hand timeout 的狀態, 必送秒數歸 0
                 if not self.is_no_hand_timeout:
-                    self._publish_status(self.mqtt.pub_topics['system'], 'Reset')
+                    self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=True)
+                    self.is_logout_countdown = False
+                    self.update_debug_info()
+                    trigger_logout = True
                 self.is_no_hand_timeout = True  # 重設 flag
-                return self.now_dt, self._finalize_session()
-            return self.now_dt, None
+                self.is_ai_login = False
+                return self.now_dt, self._finalize_session(), trigger_logout
+            return self.now_dt, None, trigger_logout
+
+        if not self.is_ai_login:
+            trigger_logout = False
+            return self.now_dt, None, trigger_logout
 
         is_gloved, _ = self._verify_glove(detections)
 
@@ -136,17 +183,19 @@ class HandWashTracker:
         #    self.finish_reason = 'all flags are 1'
         #    # 發送訊息給應用端
         #    self._publish_status(self.mqtt.pub_topics['system'], 'BackLogin')
-        #    return self.now_dt, self._finalize_session()
+        #    return self.now_dt, self._finalize_session(), is_logout
         if self.detecting_step == 13:
             self.finish_reason = 'all flags are 1'
             # 發送訊息給應用端
-            self._publish_status(self.mqtt.pub_topics['system'], 'BackLogin')
-            return self.now_dt, self._finalize_session()
+            self._publish_status(self.mqtt.pub_topics['system'], 'BackLogin', fatal=True)
+            trigger_logout = True
+            self.is_ai_login = False
+            return self.now_dt, self._finalize_session(), trigger_logout
 
         # 發送訊息給應用端
-        self._publish_status(self.mqtt.pub_topics['process'], 'status')
+        self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
 
-        return self.now_dt, None
+        return self.now_dt, None, trigger_logout
 
     def _finalize_session(self):
         """ 結束 Session 並回傳資料，若完全無進度則放棄寫入 """
@@ -473,8 +522,10 @@ class HandWashTracker:
         if self.flags[step_num-1] == 0 and step_num == self.detecting_step:
             self.flags[step_num-1] = 1
             self.trigger_times[step_num-1] = utc_now_str
-            self.detecting_step += 1
-            logger.info(f'[{self.zone_name}] detecting step become {self.detecting_step} !')
+            self._publish_status(self.mqtt.pub_topics['process'], 'status', 
+                                 fatal=True, is_trigger=True)
+            #sleep(self.time_cfg['trigger_pause'])
+            self.step_trigger_time = self.now_dt
 
     def _verify_glove(self, detections):
         g_boxes = detections['box'][np.isin(detections['label'], self.label_gloved_hand)]
@@ -624,10 +675,16 @@ class HandWashTracker:
         if self.durations[step_num] > self.max_durations[step_num]:
             self.max_durations[step_num] = self.durations[step_num]
 
-    def _create_mqtt_message(self, cmd):
+    def _create_mqtt_message(self, cmd, is_switch_step, is_trigger):
         if cmd == 'Reset':
+            max_time = self.sys_cfg[self.detecting_step-1]['timeoutmax']
+            remain = max(max_time - self.no_hand_elapsed, 0)
+            msgs = {"cmd": cmd, "side": self.zone_name.lower(), "time": str(remain)}
+        elif cmd == 'ResetCancel':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'BackLogin':  # 12 步驟 reset
+            msgs = {"cmd": cmd, "side": self.zone_name.lower()}
+        elif cmd == 'AILogin':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'Alarm':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
@@ -638,26 +695,30 @@ class HandWashTracker:
             #step = max(self.collision_buffers, key=self.collision_buffers.get)
 
             step = self.detecting_step
-            if self.collision_buffers[step] == 0:
-                return
+            #if self.collision_buffers[step] == 0:
+            #    return
             
             #logger.info(f'the most continuous buffers in this frame is step{step} !')
             msgs = {
                 "step_id": f"Step{step}",
-                "washcount": str(self.counts[step-1]),
-                "washtime": str(self.durations[step]),
-                "side": self.zone_name.lower()
+                "washcount": str(self.counts[step-1] if not is_switch_step else 0),
+                "washtime": str(self.durations[step] if not is_switch_step else 0),
+                "side": self.zone_name.lower(),
+                "trigger": is_trigger
             }
         else:
             logger.error(f'unknow command: {cmd} !')
 
         return msgs
 
-    def _publish_status(self, topic, cmd):
-        msg = self._create_mqtt_message(cmd)
+    def _publish_status(self, topic, cmd, fatal=False, is_switch_step=False, is_trigger=False):
+        msg = self._create_mqtt_message(cmd, is_switch_step, is_trigger)
         now = time()
-        if msg and (cmd != 'status' or now - self.pub_time >= self.pub_period):
-            level = 'TRACE' if cmd == 'status' else 'INFO'
+        if msg and (fatal or now - self.pub_time >= self.pub_period):
+            level = 'INFO' if fatal else 'TRACE'
             self.debug_info['sent_msg'] = self.mqtt.publish(topic, msg, level)
             if cmd == 'status':
                 self.pub_time = now  # 只有及時狀態要卡發送頻率
+
+    #def _no_hand_callback(self, cmd):
+    #    self.is_no_hand_timeout = True
