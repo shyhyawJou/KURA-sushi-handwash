@@ -143,13 +143,15 @@ class HandWashTracker:
             self.no_hand_elapsed = (self.now_dt - self.no_hand_start_time).total_seconds()
             max_time = self.sys_cfg[self.detecting_step-1]['timeoutmax']
             if max_time > self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay']:
-                self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
+                if self.is_ai_login:
+                    self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=not self.is_logout_countdown)
                 self.is_logout_countdown = True
             elif self.start_time and self.no_hand_elapsed >= max_time:
                 self.finish_reason = 'no hand timeout'
                 # 如果觸發 no hand timeout 的狀態, 必送秒數歸 0
                 if not self.is_no_hand_timeout:
-                    self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=True)
+                    if self.is_ai_login:
+                        self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=True)
                     self.is_logout_countdown = False
                     self.update_debug_info()
                     trigger_logout = True
@@ -204,7 +206,7 @@ class HandWashTracker:
         # 需求：過濾完全沒更新的紀錄
         # 如果 flags 全部都是 0，代表 12 個步驟一個都沒達成
         if sum(self.flags) == 0:
-            logger.info(f"[{self.zone_name}] Session timed out with no progress. Skipping CSV write.")
+            logger.warning(f"[{self.zone_name}] Session timed out with no progress. Skipping CSV write.")
             self.reset()
             return None 
 
