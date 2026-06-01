@@ -28,16 +28,13 @@ class Csv_Manager:
         return path
 
     def _init_csv(self):
-        self.headers = ["Store ID", "Start Time", "End Time"]
-        # 動態生成 Step1~12 的 flag, time, count 標題
-        for suffix in ["flag", "time", "count"]:
-            for i in range(1, 13):
-                self.headers.append(f"Step{i} {suffix}")
-        self.headers.extend(['Actual Sequence', 'Gloved Action Sequence'])
-        for i in range(3, 8):
+        self.headers = [
+            "Store ID", "Step Sequence", "Start Time", "End Time", 'Duration', "Step Count", 
+            "Is Detecting Step", "Action Confirmed Time", 'Finish reason', 'Region'
+        ]
+        for i in range(1, 13):
             self.headers.append(f'Step{i} min count')
-        self.headers.append('Finish reason')
-        self.headers.append('Region')
+            self.headers.append(f'Step{i} min time')
 
         if not os.path.exists(self.file_path) or self.overwrite:
             with open(self.file_path, 'w', newline='', encoding='utf-8') as f:
@@ -59,7 +56,9 @@ class Csv_Manager:
             # 確保欄位順序正確
             writer = csv.DictWriter(f, fieldnames=self.headers)
             writer.writerow(data_dict)
-        logger.success(f"Successfully exported wash record to {self.file_path}")
+        
+        region = data_dict['Region'].capitalize()
+        logger.success(f"[{region}] Successfully exported wash record to {self.file_path}")
 
     def _find_today_csv(self, now: str):
         """ 找到與今天相同日期的 csv """
