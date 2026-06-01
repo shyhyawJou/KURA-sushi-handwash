@@ -18,10 +18,7 @@ with open(CFG['logic']['system_parameter']) as f:
     time_scale = time_param['time_scale']
     for info in SYS_CFG['stages']:
         info['washcountmax'] = int(info['washcountmax'])
-        if info['washcountmax'] > 0:
-            info['washcountmax'] += 1 * time_scale  # 為了讓 UI 能到達及格搓洗次數
         info['washtimemax'] = float(info['washtimemax']) * time_scale
-        info['washtimemax'] += 0.5 * time_scale  # 為了讓 UI 能到達及格秒數
         info['timeoutmax'] = float(info['timeoutmax']) * time_scale
     for name in time_param:
         if name == 'time_scale':

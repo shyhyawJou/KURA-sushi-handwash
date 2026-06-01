@@ -16,16 +16,13 @@ from utils import (Mjpeg_Streamer,
                    RTMDet_ONNX, 
                    Camera,
                    Video,
-                   plot_bbox, 
                    setup_logger, MY_LOGGER,
                    Csv_Manager,
                    HandWashTracker,
-                   draw_timestamp, draw_status_overlay, draw_debug_panel,
-                   Device,
-                   Result,
+                   draw_timestamp, draw_debug_panel, plot_bbox,
                    Timer,
                    MQTT,
-                   Visualization,
+                   get_now_str,
                    CFG, SYS_CFG)
 
 
@@ -49,30 +46,24 @@ class App_HandWash:
         self.result_video = Video(**CFG['video']['result'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.mqtt_manager = MQTT(**CFG['mqtt'])
-        #self.draw_manager = Visualization(CFG)
-        #self.result_drawer = Result(**CFG['visualization']['result'])
-        #self.device = Device(**CFG['device'], device_code=device_code, ai_class=self.ai_model.classes)
-        self.device = None
-        self.is_alarm = False
 
         # 檢測洗手
-        #self.tracker_left = HandWashTracker(zone_name="Left", devices=self.device.left_data,
-        #                                    ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
-        #self.tracker_right = HandWashTracker(zone_name="Right", devices=self.device.right_data, 
-        #                                     ai_class=self.ai_model.classes, logic_cfg=CFG['logic'])
-        self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, None, 
-                                            mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
-        self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, None, 
-                                             mqtt=self.mqtt_manager, pub_freq=CFG['mqtt']['pub_freq'])
+        self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, 
+                                            self.mqtt_manager, CFG['mqtt']['pub_freq'])
+        self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, 
+                                             self.mqtt_manager, CFG['mqtt']['pub_freq'])
         self.is_left_login = False
         self.is_right_login = False
         self.is_ai_login = True
+        self.is_alarm = False
 
         # mqtt callback
         callbacks = {
             #'ResetFinish': {'left': self.tracker_left._no_hand_callback, 
             #               'right': self.tracker_right._no_hand_callback},
-            'Login': self._login_callback
+            'Login': self._login_callback,
+            'switch_step': {'left': self.tracker_left.switch_step_callback, 
+                            'right': self.tracker_right.switch_step_callback}
         }
         self.mqtt_manager.add_callbacks(callbacks)
         
@@ -122,15 +113,11 @@ class App_HandWash:
                     pbar.update(1)
 
                     if ret is None:
-                        #logger.warning(f"{VIDEO_PATH} cannot read frame at {pbar.n}, skip this frame !")
                         continue
                     elif ret is False:
                         logger.error(f"{VIDEO_PATH} stop at {pbar.n} frame !")
                         break
                     
-                    #cv2.imshow('aaa', frame)
-                    #cv2.waitKey(1)
-
                     # 如果左右都沒登入
                     if not self.is_ai_login and not self.is_left_login and not self.is_right_login:
                         sleep(0.01)
@@ -181,11 +168,14 @@ class App_HandWash:
                             self.is_alarm = False
 
                     # 洗手檢測
+                    now = time()
+
                     with handwash_timer:
                         if not self.is_alarm and (self.is_left_login or self.is_ai_login):
-                            now, res_l, trigger_logout = self.tracker_left.update(
+                            res_l, trigger_logout = self.tracker_left.update(
                                 left_dets, 
-                                frame_copy
+                                frame_copy,
+                                now
                             )
                             if res_l: 
                                 self.csv_manager.write_record(res_l)
@@ -194,9 +184,10 @@ class App_HandWash:
                                 logger.warning('[Left] Logout, Stop detection !')
                         
                         if not self.is_alarm and (self.is_right_login or self.is_ai_login):
-                            now, res_r, trigger_logout = self.tracker_right.update(
+                            res_r, trigger_logout = self.tracker_right.update(
                                 right_dets, 
-                                frame_copy
+                                frame_copy,
+                                now
                             )
                             if res_r:
                                 self.csv_manager.write_record(res_r)
@@ -214,28 +205,11 @@ class App_HandWash:
                                   self.ai_model.classes, 
                                   **CFG['visualization']['bbox'])
                         
-                        ## 畫左 devices
-                        #plot_bbox(frame_copy, 
-                        #          self.device.left_bboxes,
-                        #          self.device.left_labels, 
-                        #          ([1.] * len(self.device.left_labels)), 
-                        #          self.ai_model.classes, 
-                        #          **CFG['visualization']['bbox'])
-#
-                        ## 畫右 devices
-                        #plot_bbox(frame_copy, 
-                        #          self.device.right_bboxes,
-                        #          self.device.right_labels, 
-                        #          [1.] * len(self.device.right_labels), 
-                        #          self.ai_model.classes, 
-                        #          **CFG['visualization']['bbox'])
-
-
                         # 畫 debug
                         draw_debug_panel(frame_copy, self.tracker_left, self.tracker_right)
 
                         # 畫時間戳
-                        now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
+                        now_str = get_now_str(now, utc=False)
                         draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
 
                     # push to streamer
@@ -249,7 +223,7 @@ class App_HandWash:
                         #self.draw_manager.put(frame_copy, now, scores, boxes, pred_labels)
 
                 # log time elapsed
-                MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
+                MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'INFO', reset=False)
                 MY_LOGGER.log(f'[{read_frame_timer.name}] {read_frame_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{split_timer.name}] {split_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{alarm_timer.name}] {alarm_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)

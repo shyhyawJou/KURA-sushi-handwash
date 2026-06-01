@@ -1,15 +1,4 @@
 import cv2
-import numpy as np
-from typing import Sequence
-from loguru import logger
-from queue import Queue, Full
-import traceback
-from time import sleep
-from threading import Thread
-from .logger import MY_LOGGER
-from .timer import Timer
-from .streamer import Mjpeg_Streamer
-from .video import Video
 
 
 
@@ -65,131 +54,6 @@ COLORS = [
     '483D8B',  # 深石板藍
     '708090'  # 石板灰
 ]
-
-
-DISTANCE_COLOR = [
-    (0, 0, 255),      # 01. 紅色 (Red) - 初始顏色
-    (0, 255, 0),      # 02. 亮綠 (Green)
-    (255, 0, 255),    # 03. 品紅 (Magenta)
-    (0, 255, 255),    # 04. 黃色 (Yellow)
-    (255, 255, 0),    # 05. 青色 (Cyan)
-    (0, 165, 255),    # 06. 橘色 (Orange)
-    (255, 128, 0),    # 07. 亮蔚藍 (Bright Azure) - 用來替代純藍，但更偏青
-    (128, 0, 128),    # 08. 紫色 (Purple)
-    (0, 250, 154),    # 09. 中春綠 (Medium Spring Green)
-    (203, 192, 255),  # 10. 粉紅 (Pink)
-    (0, 128, 0),      # 11. 深綠 (Dark Green)
-    (255, 255, 255),  # 12. 白色 (White)
-    (42, 42, 165),    # 13. 棕色 (Brown)
-    (128, 128, 0),    # 14. 深青 (Teal)
-    (0, 0, 128),      # 15. 深紅 (Maroon)
-    (209, 206, 0),    # 16. 天藍 (Sky Blue)
-    (0, 215, 255),    # 17. 金色 (Gold)
-    (130, 0, 255),    # 18. 霓虹紫 (Neon Purple)
-    (128, 128, 128),  # 19. 灰色 (Gray)
-    (30, 105, 210)    # 20. 巧克力色 (Chocolate)
-]
-
-
-class Visualization:
-    def __init__(self, cfg):
-        self.streamer = Mjpeg_Streamer(**cfg['streamer'])
-        self.origin_video = Video(**cfg['video']['origin'])
-        self.result_video = Video(**cfg['video']['result'])
-        self.thread = None
-        self.is_running = True
-        self.cfg = cfg
-        self.frame_q = Queue(256)
-
-    def put(self, frame, now, boxes, pred_labels, scores):
-        try:
-            self.frame_q.put_nowait((frame, now, boxes, pred_labels, scores))
-        except Full:
-            pass
-        except:
-            logger.error(traceback.format_exc())
-    
-    def _run(self):
-        logger.info('開始執行 draw frame 的執行緒 !')
-    
-        while self.is_running:
-            frame, now, boxes, pred_labels, scores = self.frame_q.get()
-
-            # 畫 detections
-            plot_bbox(frame, 
-                        boxes,
-                        pred_labels, 
-                        scores, 
-                        self.ai_model.classes, 
-                        **self.cfg['visualization']['bbox'])
-                    
-            # 畫 debug
-            draw_debug_panel(frame, self.tracker_left, self.tracker_right)
-
-            # 畫時間戳
-            now_str = now.strftime('%Y%m%d %H%M%S.%f')[:-3]
-            draw_timestamp(frame, now_str, **self.cfg['visualization']['timestamp'])
-
-            # push to streamer
-            self.streamer.push_frame(frame)
-            
-            # write frame into video
-            self.origin_video.write_frame(frame)
-            self.result_video.write_frame(frame)
-
-            sleep(0.005)
-
-        logger.info('結束執行繪製 frame 的執行緒 !')
-
-    def start(self):
-        self.thread = Thread(target=self._run)
-        self.thread.start()
-
-    def stop(self):
-        self.is_running = False
-        if self.thread:
-            self.thread.join(2.)
-        self.streamer.stop()
-        self.origin_video.stop()
-        self.result_video.stop()
-        logger.success(f'已釋放 draw frame 的所有資源 !')
-
-
-class Result:
-    def __init__(self, mode, stay_time, num_block):
-        self.mode = mode
-        self.stay_time = stay_time
-        self.num_block = num_block
-
-        if self.mode != 'center':
-            raise ValueError(f'"{self.mode}" is the unknown mode of drawing result !')
-        
-    def draw_step(self, img, texts: Sequence):
-        img_h, img_w = img.shape[:2]
-
-        if self.mode == 'center':
-            x = np.linspace(0, img_w - 1, self.num_block * 2 + 1, endpoint=True)[1:-1:2]
-            y = np.linspace(0, img_h - 1, 5, endpoint=True)[1:2]
-            x, y = np.meshgrid(x, y, indexing='xy')
-            points = np.stack([x.ravel(), y.ravel()], axis=-1).astype(int)
-            assert len(texts) == len(points)
-
-            for text, point in zip(texts, points):
-                # 陰影
-                shadow_offset = 2
-                cv2.putText(img, text, point + shadow_offset, cv2.FONT_HERSHEY_SIMPLEX,
-                            1., (0, 0, 0), 2)
-
-                cv2.putText(img, text, point, cv2.FONT_HERSHEY_SIMPLEX, 1.,
-                            (0, 255, 0), 2)
-
-    def draw_region(self, img, bboxes, text):
-        bboxes = bboxes.astype(int)
-        for box in bboxes:
-            cv2.putText(img, text, box[2:4], cv2.FONT_HERSHEY_SIMPLEX, 1., (0, 0, 255), 2)
-
-    def _make_grids(self):
-        pass
 
 
 def hex_to_rgb(hex_str):
@@ -279,27 +143,6 @@ def plot_bbox(img,
                     font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
 
 
-def plot_distance(img, boxA, boxB, distance, color):
-    """ 畫在 boxA 附近 """
-    distance = int(distance)
-    ctr_A = ((boxA[0:2] + boxA[2:4]) / 2.).astype(int)
-    ctr_B = ((boxB[0:2] + boxB[2:4]) / 2.).astype(int)
-    org = np.int64((ctr_A + ctr_B) / 2.)
-    cv2.line(img, ctr_A, ctr_B, (0, 255, 0), 2)
-    cv2.putText(img, str(distance), org, cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-
-
-def plot_xy(img, xy, org):
-    xy = np.array(xy).astype(int)
-    org = np.array(org).astype(int)
-    cv2.putText(img, f'{xy}', org, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-
-
-def plot_timeout(img, name, elapsed, org, color):
-    org = np.array(org).astype(int)
-    cv2.putText(img, f'[{name}] {elapsed:.1f}', org, cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-
-
 def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offset=2):
     """
     在影像右下角繪製帶有陰影的紅色時間戳
@@ -325,38 +168,6 @@ def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offse
     cv2.putText(img, timestamp_str, (x, y), 
                 font, font_scale, (0, 0, 255), thickness)
     
-
-def draw_status_overlay(img, tracker_left, tracker_right):
-    """
-    在畫面左上與右上分別繪製 Left/Right 區域的當前步驟與 Count (綠色文字 + 黑色陰影)
-    """
-    h, w = img.shape[:2]
-    
-    def draw_text_with_shadow(image, text, org, font_scale=0.8, color=(0, 255, 0), thickness=2):
-        # 繪製黑色陰影 (偏移 2 像素)
-        cv2.putText(image, text, (org[0] + 2, org[1] + 2), cv2.FONT_HERSHEY_SIMPLEX, 
-                    font_scale, (0, 0, 0), thickness + 1, cv2.LINE_AA)
-        # 繪製綠色主文字
-        cv2.putText(image, text, org, cv2.FONT_HERSHEY_SIMPLEX, 
-                    font_scale, color, thickness, cv2.LINE_AA)
-
-    def get_info(tracker):
-        curr_step = tracker.step_sequence[-1] if tracker.step_sequence else "None"
-        last_count = 0
-        if isinstance(curr_step, int) and 3 <= curr_step <= 7:
-            last_count = tracker.counts[curr_step-1]
-        return f"Step: {curr_step}", f"Count: {last_count}"
-
-    # 左側資訊
-    s_l, c_l = get_info(tracker_left)
-    draw_text_with_shadow(img, f"[LEFT] {s_l}", (20, 50))
-    draw_text_with_shadow(img, f"       {c_l}", (20, 85))
-
-    # 右側資訊
-    s_r, c_r = get_info(tracker_right)
-    draw_text_with_shadow(img, f"[RIGHT] {s_r}", (w - 280, 50))
-    draw_text_with_shadow(img, f"        {c_r}", (w - 280, 85))
-
 
 def hex_to_rgb(hex_str):
     hex_str = hex_str.lstrip('#').strip()
@@ -389,79 +200,61 @@ def draw_debug_panel(img, tracker_l, tracker_r):
         d = tracker.debug_info
         cfg = tracker.cfg
         sys_cfg = tracker.sys_cfg
+        scr = tracker.scrub_count_ratio
+        steps = {i: data for i, data in d['detected_steps'].items() if data is not None} 
 
         # step
-        completed_step = d['completed_step']
-        draw_text_with_shadow(img, f'completed step: {completed_step}',
-                              (start_x, h - panel_height + 3), (0, 255, 0), 0.35, 1)
+        saved_step = d['saved_step']
+        text = f'saved step: {saved_step}'
+        draw_text_with_shadow(img, text, (start_x, h - panel_height + 3), (0, 255, 0), 0.35, 1)
 
-        # 1. 狀態標頭 (位置隨 panel_height 自動連動)
+        # 狀態標頭
         status_color = (0, 255, 255) if d['status'] == "Hand Detected" else (150, 150, 150)
         draw_text_with_shadow(img, f"[{tracker.zone_name}] {d['status']}", 
                               (start_x, h - panel_height + 15), status_color, 0.35, 1)
 
+        # 步驟狀態
         for i in range(1, 13):
-            is_done = d['flags'][i-1] == 1
-            is_active = d['active_buffers'][i] > 0
-
-            # 判斷是否為「觸發當下」(門檻值達標那一幀)
-            is_trigger_moment = False
-            if 3 <= i <= 6:
-                #if d['counts'][i-1] >= cfg['scrub_flag_count'] and is_active:
-                #    is_trigger_moment = True
-                #name = f'step{i}_min_scrub'
-                #if d['active_buffers'][i] >= cfg[name] and is_active:
-                #    is_trigger_moment = True
-                if d['counts'][i-1] >= sys_cfg[i-1]['washcountmax'] and is_active:
-                    is_trigger_moment = True
-            else:
-                # 不用 count 的步驟
-                name = 'trigger_step1_8_buffer' if i in {1, 8} else f'trigger_step{i}_buffer'
-                if d['active_buffers'][i] >= cfg[name] and is_active:
-                    is_trigger_moment = True
-
-            # --- 顏色與狀態邏輯 ---
-            text_color = (255, 255, 255) # 預設白色 (狀態1: 未進行未觸發)
-            bg_color = None
-            suffix = ""
-
-            if is_trigger_moment:
-                # 狀態: 觸發當下 (粉色)
-                text_color = (0, 0, 0)      # 黑字
+            is_done = i in steps
+            is_active = d['frames'][i] > 0
+            is_detecting = i == d['detecting_step']
+            
+            # 文字, 背景
+            if is_detecting:
                 bg_color = (180, 105, 255)  # 粉色底
-                suffix = " !! TRIGGER !!"
-            elif is_active and is_done:
-                # 狀態2: 正在進行且曾觸發過 (黃字綠底)
-                text_color = (0, 255, 255)  # 黃字
-                bg_color = (34, 139, 34)    # 綠色底
-                suffix = " (RE-DOING)"
-            elif is_active and not is_done:
-                # 狀態3: 正在進行且未觸發過 (純黃色)
-                text_color = (0, 255, 255)
-                suffix = " << ACTIVE"
-            elif not is_active and is_done:
-                # 狀態4: 已觸發且目前未進行 (純綠色)
+                text_color = (0, 0, 0)      # 黑字
+                suffix = "[DETECTING] !"
+            elif is_done:
+                bg_color = None  # 沒背景
                 text_color = (0, 255, 0)
-                suffix = " [DONE]"
-            # 狀態1 (白色) 為預設值，不需額外處理
+                suffix = "[DONE]"
+            elif is_active:
+                bg_color = (0, 255, 255)  # 黃底
+                text_color = (0, 0, 0)  # 黑字
+                suffix = "[ACTIVE]"
+            else:
+                bg_color = None  # 沒背景
+                text_color = (255, 255, 255)  # 綠字
+                suffix = ""
 
-            # 繪製文字與背景
-            #count_info = f" {d['counts'][i-1]}/{cfg['scrub_flag_count']}" if 3 <= i <= 7 else ""
-            name1 = f'step{i}_frame_scrub_ratio'
-            #name2 = f'step{i}_min_scrub'
-            min_count = sys_cfg[i-1]['washcountmax']
-            duration = d['durations'][i]
+            # 重要資訊
+            min_frame = cfg['action_frame']
             min_duration = sys_cfg[i-1]['washtimemax']
-            max_duration = d['max_durations'][i]
-            active_buffers = d['active_buffers'][i]
-            counts = d['counts'][i-1]
-            max_counts = d['max_counts'][i-1]
-            #count_info = f" {d['counts'][i-1]}" if 3 <= i <= 7 else "-1"
-            #line_text = f"Step {i:<2}: {count_info} {max_duration:.1f} {suffix}"
-            #count_info = f" {counts}/{max_counts}/{cfg[name1]}/{cfg[name2]}" if 3 <= i <= 7 else " -1"
-            count_info = f" {counts}/{max_counts}/{cfg[name1]}/{min_count}" if 3 <= i <= 7 else " -1"
-            duration_info = f' {duration:.1f}/{min_duration:.2f}'
-            line_text = f"Step {i:<2}: {active_buffers:02d}{count_info}{duration_info} {suffix}"
+            min_count = sys_cfg[i-1]['washcountmax']
+
+            if is_done:
+                frame = steps[i].frame
+                duration = steps[i].duration
+                count = steps[i].count
+            else:
+                frame = d['frames'][i]
+                duration = d['durations'][i]
+                count = d['counts'][i]
+
+            frame_info = f'{frame:02d}/{min_frame}'
+            count_info = f'  {count}/{min_count}/{scr[i]}'
+            duration_info = f'  {duration:.2f}/{min_duration:.2f}'
+            line_text = f"Step {i:<2}: {frame_info}{count_info}{duration_info}  {suffix}"
             
             # y 座標隨 panel_height 自動計算，讓列表貼合底部
             pos_y = h - (panel_height - 30) + (i-1) * line_height
@@ -474,13 +267,6 @@ def draw_debug_panel(img, tracker_l, tracker_r):
                 cv2.putText(img, line_text, (start_x, pos_y), font, font_size, text_color, 1, cv2.LINE_AA)
             else:
                 draw_text_with_shadow(img, line_text, (start_x, pos_y), text_color, font_size)
-
-        # 3. 累積位移量進度條 (緊貼底部)
-        move_acc = d['move_acc']
-        if move_acc > 0:
-            bar_w = int(min(move_acc * 15, 80)) 
-            cv2.rectangle(img, (start_x, h - 12), (start_x + bar_w, h - 6), (0, 255, 0), -1)
-            draw_text_with_shadow(img, f"Move: {move_acc:.1f}", (start_x + 90, h - 6), (0, 255, 0), 0.3)
 
     def render_rich_mqtt_on_frame(tracker, start_x, start_y, title_color):
         d = tracker.debug_info

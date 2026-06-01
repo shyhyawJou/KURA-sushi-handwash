@@ -65,6 +65,8 @@ class MQTT:
                 self.callbacks['ResetFinish'][side](cmd)
             elif cmd['cmd'] == 'Login':
                 self.callbacks['Login'](cmd)
+            elif cmd['cmd'] == 'switch_step':
+                self.callbacks['switch_step'][side](cmd)
         except:
             logger.error(f"{traceback.format_exc()}, "
                          f"MQTT [{msg.topic}] received: {payload}")
