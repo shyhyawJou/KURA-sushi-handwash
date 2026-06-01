@@ -35,7 +35,7 @@ class App_HandWash:
 
         self.is_running = False
 
-        CFG['camera']['video_path'] = VIDEO_PATH  # 要讀取的影片
+        CFG['camera']['video_path'] = str(VIDEO_PATH)  # 要讀取的影片
         CFG['video']['origin']['output_path'] = VIDEO_PATH  # 利用檔名產生輸出檔案
         CFG['csv']['output_path'] = VIDEO_PATH.with_suffix('.csv')  # 利用檔名產生輸出檔案
 
