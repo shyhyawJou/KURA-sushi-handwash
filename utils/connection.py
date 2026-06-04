@@ -60,7 +60,6 @@ class MQTT:
             if self.callbacks is None:
                 return
 
-
             side = cmd['side'].lower()
             if cmd['cmd'] == 'Login':
                 self.callbacks['Login'](cmd)
