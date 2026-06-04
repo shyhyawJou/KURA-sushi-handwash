@@ -55,11 +55,12 @@ class App_HandWash:
 
         # mqtt callback
         callbacks = {
-            #'ResetFinish': {'left': self.tracker_left._no_hand_callback, 
-            #               'right': self.tracker_right._no_hand_callback},
-            'Login': self._login_callback,
-            'switch_step': {'left': self.tracker_left.switch_step_callback, 
-                            'right': self.tracker_right.switch_step_callback}
+            'Login': {'left': self.tracker_left.login_callback, 
+                      'right': self.tracker_right.login_callback},
+            'Logout': {'left': self.tracker_left.logout_callback, 
+                       'right': self.tracker_right.logout_callback},
+            'NextStep': {'left': self.tracker_left.switch_step_callback, 
+                         'right': self.tracker_right.switch_step_callback}
         }
         self.mqtt_manager.add_callbacks(callbacks)
         
@@ -235,6 +236,14 @@ class App_HandWash:
         self.stop()
 
     def stop(self):
+        # CSV
+        data = self.tracker_left.stop()
+        if data['Step Sequence']:
+            self.csv_manager.write_record(data)
+        data = self.tracker_right.stop()
+        if data['Step Sequence']:
+            self.csv_manager.write_record(data)
+
         if not self.is_running:
             return
         self.is_running = False

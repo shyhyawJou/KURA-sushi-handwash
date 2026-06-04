@@ -25,8 +25,15 @@ STAGES = [
 
 logger.info(f'Config: {STAGES}')
 
-def make_command(side: str) -> dict:
-    return {"cmd": "switch_step", "side": side}
+def make_command(side: str, current_id: int, next_id: int) -> dict:
+    """
+    根據當前步驟與下一步驟生成對應的 MQTT Payload。
+    如果當前是第 12 步，則發送 Logout 指令。
+    """
+    if current_id == 12:
+        return {"cmd": "Logout", "side": side}
+    
+    return {"cmd": "NextStep", "step_id": f"Step{next_id}", "side": side}
 
 @dataclass
 class StepState:
@@ -101,7 +108,7 @@ def advance(client, side: str):
     label    = "reset → Step 1" if is_reset else f"→ Step {next_id}"
     logger.success(f"[{side}] Step {current_id:02d} satisfied, {label}")
 
-    cmd = make_command(side)
+    cmd = make_command(side, current_id, next_id)
     payload = json.dumps(cmd)
     client.publish(TOPIC_SEND, payload)
     logger.info(f"[SEND] topic={TOPIC_SEND} payload={payload}")
