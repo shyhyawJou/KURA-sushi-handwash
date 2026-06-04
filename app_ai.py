@@ -36,7 +36,7 @@ class App_HandWash:
         self.is_running = False
 
         CFG['camera']['video_path'] = str(VIDEO_PATH)  # 要讀取的影片
-        CFG['video']['origin']['output_path'] = VIDEO_PATH  # 利用檔名產生輸出檔案
+        CFG['video']['result']['output_path'] = VIDEO_PATH  # 利用檔名產生輸出檔案
         CFG['csv']['output_path'] = VIDEO_PATH.with_suffix('.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
@@ -59,11 +59,12 @@ class App_HandWash:
 
         # mqtt callback
         callbacks = {
-            #'ResetFinish': {'left': self.tracker_left._no_hand_callback, 
-            #               'right': self.tracker_right._no_hand_callback},
-            'Login': self._login_callback,
-            'switch_step': {'left': self.tracker_left.switch_step_callback, 
-                            'right': self.tracker_right.switch_step_callback}
+            'Login': {'left': self.tracker_left.login_callback, 
+                      'right': self.tracker_right.login_callback},
+            'Logout': {'left': self.tracker_left.logout_callback, 
+                       'right': self.tracker_right.logout_callback},
+            'NextStep': {'left': self.tracker_left.switch_step_callback, 
+                         'right': self.tracker_right.switch_step_callback}
         }
         self.mqtt_manager.add_callbacks(callbacks)
         
@@ -238,6 +239,7 @@ class App_HandWash:
                 logger.error(f"{traceback.format_exc()}")
 
         pbar.close()
+        self.stop()
 
     def handle_exit(self, signum, frame):
         if signum == signal.SIGTERM:
@@ -249,6 +251,14 @@ class App_HandWash:
         self.stop()
 
     def stop(self):
+        # CSV
+        data = self.tracker_left.stop()
+        if data['Step Sequence']:
+            self.csv_manager.write_record(data)
+        data = self.tracker_right.stop()
+        if data['Step Sequence']:
+            self.csv_manager.write_record(data)
+
         if not self.is_running:
             return
         self.is_running = False
@@ -316,17 +326,22 @@ def get_sort_key(path_obj):
 
 
 if __name__ == "__main__":
-    try:
-        paths = sorted(p('video').glob('**/*.mp4'), key=get_sort_key)
-        for path in paths:
-            if path.name != '20260410_1.mp4':
-                continue
+    FOLDER = 'downloads'
+
+    paths = sorted(p(FOLDER).glob('**/*.mp4'), key=get_sort_key)
+    for path in paths:
+        try:
+            #if path.name != '20260410_1.mp4':
+            #    continue
 
             VIDEO_PATH = path
+            if path.stem != 'test' and int(path.stem.split('_')[1]) not in {2, 3, 4, 8, 9, 10}:
+                continue
+
             device_code = socket.gethostname().split('-')[-1]
             app = App_HandWash(device_code)
             app.run()
-    except:
-        logger.error(traceback.format_exc())
-    finally:
-        logger.success('Application terminated !')
+        except:
+            logger.error(f'{path} 發生錯誤: {traceback.format_exc()} !')
+        finally:
+            logger.success('Application terminated !')

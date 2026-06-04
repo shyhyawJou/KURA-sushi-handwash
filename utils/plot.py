@@ -205,13 +205,18 @@ def draw_debug_panel(img, tracker_l, tracker_r):
 
         # step
         saved_step = d['saved_step']
-        text = f'saved step: {saved_step}'
-        draw_text_with_shadow(img, text, (start_x, h - panel_height + 3), (0, 255, 0), 0.35, 1)
+        if saved_step:
+            text = f'[{tracker.zone_name}] Saved step {saved_step}'
+            pos_y = h - panel_height + 3
+            t_size = cv2.getTextSize(text, font, font_size, 1)[0]
+            cv2.rectangle(img, (start_x - 2, pos_y - 9), (start_x + t_size[0] + 25, pos_y + 3), (0, 165, 255), -1)
+            #cv2.putText(img, text, (start_x, pos_y), font, font_size, (0, 0, 0), 1, cv2.LINE_AA)
+            draw_text_with_shadow(img, text, (start_x, pos_y), (0, 255, 0), 0.35, 1)
 
         # 狀態標頭
         status_color = (0, 255, 255) if d['status'] == "Hand Detected" else (150, 150, 150)
         draw_text_with_shadow(img, f"[{tracker.zone_name}] {d['status']}", 
-                              (start_x, h - panel_height + 15), status_color, 0.35, 1)
+                              (start_x, h - panel_height + 15), status_color, font_size)
 
         # 步驟狀態
         for i in range(1, 13):

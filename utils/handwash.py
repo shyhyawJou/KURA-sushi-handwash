@@ -44,12 +44,11 @@ class HandWashTracker:
         self.has_soaped = False 
         self.now = time()       
         self.finish_reason = None
-        self.detecting_step = 1
+        self.detecting_step = self.cfg['init_step_num']
         self.pub_time = float('-inf')
         self.debug_info = {}
-        self.is_ai_login = False  # 給 ai login 用
         self.is_no_hand_timeout = True
-        self.is_logout_countdown = False
+        self.is_login = False
         self.sent_msg = None
         self.no_hand_elapsed = -1
         self.pub_no_hand = False
@@ -60,18 +59,19 @@ class HandWashTracker:
         self.steps = Step_History()
 
         # 當下洗手資訊
-        self.frames = MyDict({i: 0 for i in range(1, 13)})
-        self.idle_frames = MyDict({i: 0 for i in range(1, 13)})
-        self.counts = MyDict({i: 0 for i in range(1, 13)})
-        self.start_times = MyDict({i: None for i in range(1, 13)})
-        self.step_confirmed_times = MyDict({i: None for i in range(1, 13)})
-        self.end_times = MyDict({i: None for i in range(1, 13)})
-        self.step_confirmed = MyDict({i: False for i in range(1, 13)})
-        self.last_start_times = MyDict({i: None for i in range(1, 13)})
-        self.durations = MyDict({i: 0 for i in range(1, 13)})
-        self.is_detecting_steps = MyDict({i: False for i in range(1, 13)})
+        self.frames = MyDict({i: 0 for i in range(0, 13)})
+        self.idle_frames = MyDict({i: 0 for i in range(0, 13)})
+        self.counts = MyDict({i: 0 for i in range(0, 13)})
+        self.start_times = MyDict({i: None for i in range(0, 13)})
+        self.step_confirmed_times = MyDict({i: None for i in range(0, 13)})
+        self.end_times = MyDict({i: None for i in range(0, 13)})
+        self.step_confirmed = MyDict({i: False for i in range(0, 13)})
+        self.last_start_times = MyDict({i: None for i in range(0, 13)})
+        self.durations = MyDict({i: 0 for i in range(0, 13)})
+        self.is_detecting_steps = MyDict({i: False for i in range(0, 13)})
         self.no_hand_start_time = None
         self.is_switch_step = False
+        self.next_step = None
 
         # debug info
         self._update_debug_info()
@@ -109,8 +109,13 @@ class HandWashTracker:
                 self.pub_no_hand = False  # reset
             self.no_hand_elapsed = -1  # reset
 
+            if not self.is_login:
+                self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
+                self.is_login = True
+
         # 狀態
-        self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
+        if self.is_login:
+            self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
 
         # 更新 debug 資料
         self._update_debug_info(hands)
@@ -119,6 +124,7 @@ class HandWashTracker:
         if self.is_switch_step:
             self._switch_step()
             self.is_switch_step = False
+            self.next_step = None
 
         # 是否結束
         if self.is_final:
@@ -185,8 +191,11 @@ class HandWashTracker:
         # 必要處理
         self.last_start_times[step_id] = None
 
-        # 是檢測中的步驟就不處理
-        if step_id == self.detecting_step or self.frames[step_id] == 0:
+        # 跳過不處理
+        if self.frames[step_id] == 0:
+            return
+        if step_id == self.detecting_step and self.step_confirmed[step_id]:
+        #if step_id == self.detecting_step:
             return
 
         # idle 處理
@@ -205,15 +214,7 @@ class HandWashTracker:
                     logger.info('Rinsed !')
 
             # reset
-            self.frames[step_id] = 0
-            self.idle_frames[step_id] = 0
-            self.counts[step_id] = 0
-            self.start_times[step_id] = None
-            self.end_times[step_id] = None
-            self.step_confirmed_times[step_id] = None
-            self.step_confirmed[step_id] = False
-            self.durations[step_id] = 0
-            self.is_detecting_steps[step_id] = False
+            self.reset_step_info(step_id)
 
     def _do_scrub_count(self, step_id):
         if step_id not in self.srcub_steps:
@@ -303,6 +304,7 @@ class HandWashTracker:
 
     def reset_step_info(self, step_id):
         self.frames[step_id] = 0
+        self.idle_frames[step_id] = 0
         self.counts[step_id] = 0
         self.start_times[step_id] = None
         self.end_times[step_id] = None
@@ -311,8 +313,7 @@ class HandWashTracker:
         self.last_start_times[step_id] = None
         self.durations[step_id] = 0
         self.is_detecting_steps[step_id] = False
-
-        logger.info(f"[{self.zone_name}] Detecting step {step_id}'s data is reset !")
+        logger.debug(f"[{self.zone_name}] Detecting step {step_id}'s data is reset !")
 
     def _publish_status(self, topic, cmd, fatal=False):
         msg = self._create_mqtt_message(cmd)
@@ -355,8 +356,47 @@ class HandWashTracker:
 
         return msgs
 
+    def stop(self):
+        """
+        強制停止當前 session。
+        把當下所有 step_confirmed 但尚未寫入 self.steps 的步驟，
+        依 start_time 排序後補入 self.steps，再執行 finalize。
+        """
+        logger.warning(f'[{self.zone_name}] Force stop triggered !')
+
+        # 收集所有「已確認但尚未寫入」的步驟
+        pending = []
+        for step_id in range(1, 13):
+            if not self.step_confirmed[step_id]:
+                continue
+            if self.start_times[step_id] is None:
+                continue
+            # 若 steps 裡已有相同 step_id 且 start_time 相同，跳過避免重複寫入
+            already_recorded = any(
+                s.id == step_id and s.start_time == self.start_times[step_id]
+                for s in self.steps
+            )
+            if already_recorded:
+                continue
+            pending.append(step_id)
+
+        # 依 start_time 排序後寫入
+        pending.sort(key=lambda sid: self.start_times[sid])
+        for step_id in pending:
+            logger.info(f'[{self.zone_name}] Force stop: saving pending step {step_id}')
+            self._update_record(step_id)
+
+        self.finish_reason = 'force stop'
+        self.is_final = True
+        export_data = self._finalize_session()
+        self.reset()
+        return export_data
+
     def _switch_step(self):
-        self.detecting_step += 1
+        if self.detecting_step == self.next_step:
+            return
+        old = self.detecting_step
+        self.detecting_step = self.next_step
         if self.detecting_step == 13:
             self.finish_reason = 'all flags are 1'
             self.detecting_step = 1
@@ -365,10 +405,18 @@ class HandWashTracker:
             if len(self.steps) > 0 and self.steps[-1].id != 12:
                 self._update_record(12)
         self.reset_step_info(self.detecting_step)
-        logger.success(f'[{self.zone_name}] Detecting step switch to {self.detecting_step} !')
+        logger.success(f'[{self.zone_name}] Detecting step switched, {old} -> {self.detecting_step} !')
 
     def switch_step_callback(self, cmd):
         self.is_switch_step = True
+        self.next_step = int(cmd['step_id'].replace('Step', ''))
+
+    def login_callback(self, cmd):
+        self.is_login = True
+        logger.warning('UI become login !')
 
     def logout_callback(self, cmd):
-        self.is_logout_countdown
+        self.is_switch_step = True
+        self.next_step = 13
+        self.is_login = False
+        logger.warning('UI become logout !')
