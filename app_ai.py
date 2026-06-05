@@ -252,10 +252,10 @@ class App_HandWash:
     def stop(self):
         # CSV
         data = self.tracker_left.stop()
-        if data['Step Sequence']:
+        if data.get('Step Sequence'):
             self.csv_manager.write_record(data)
         data = self.tracker_right.stop()
-        if data['Step Sequence']:
+        if data.get('Step Sequence'):
             self.csv_manager.write_record(data)
 
         if not self.is_running:
