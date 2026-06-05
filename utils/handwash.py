@@ -100,11 +100,11 @@ class HandWashTracker:
             if self.no_hand_start_time is None:
                 self.no_hand_start_time = self.now
             self.no_hand_elapsed = self.now - self.no_hand_start_time
-            if self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay']:
+            if self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay'] and self.is_login:
                 self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
         else:
             self.no_hand_start_time = None  # reset
-            if self.pub_no_hand:
+            if self.pub_no_hand and self.is_login:
                 self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
                 self.pub_no_hand = False  # reset
             self.no_hand_elapsed = -1  # reset
@@ -318,9 +318,12 @@ class HandWashTracker:
     def _publish_status(self, topic, cmd, fatal=False):
         msg = self._create_mqtt_message(cmd)
         if msg and (fatal or self.now - self.pub_time >= self.pub_period):
-            level = 'INFO' if fatal else 'TRACE'
+            if fatal or msg['cmd'] == 'Reset' and float(msg['time']) == 0:
+                level = 'INFO'
+            else:
+                level = 'TRACE'
             self.sent_msg = self.mqtt.publish(topic, msg, level) 
-            # 沒有
+            # 沒有發送訊息
             if self.sent_msg is not None and cmd == 'Reset':
                 self.pub_no_hand = True
             # 控制發送頻率
