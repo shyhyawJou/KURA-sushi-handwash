@@ -204,9 +204,9 @@ def draw_debug_panel(img, tracker_l, tracker_r):
         steps = {i: data for i, data in d['detected_steps'].items() if data is not None} 
 
         # step
-        saved_step = d['saved_step']
+        saved_step = d['saved_steps']
         if saved_step:
-            text = f'[{tracker.zone_name}] Saved step {saved_step}'
+            text = f'[{tracker.zone_name}] Saved step {",".join(str(s) for s in saved_step)}'
             pos_y = h - panel_height + 3
             t_size = cv2.getTextSize(text, font, font_size, 1)[0]
             cv2.rectangle(img, (start_x - 2, pos_y - 9), (start_x + t_size[0] + 25, pos_y + 3), (0, 165, 255), -1)
