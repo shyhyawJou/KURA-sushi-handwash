@@ -103,7 +103,7 @@ class HandWashTracker:
             if self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay'] and self.is_login:
                 #self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
                 pass
-            if self.is_login and self.no_hand_elapsed == self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']:
+            if self.is_login and self.no_hand_elapsed >= self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']:
                 self.is_final = True
                 self.finish_reason = 'No hand'
         else:
@@ -360,6 +360,7 @@ class HandWashTracker:
                 "trigger": self.step_confirmed[step]
             }
         else:
+            msgs = None
             logger.error(f'[{self.zone_name}] unknow command: {cmd} !')
 
         return msgs
