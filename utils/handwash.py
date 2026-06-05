@@ -52,7 +52,7 @@ class HandWashTracker:
         self.sent_msg = None
         self.no_hand_elapsed = -1
         self.pub_no_hand = False
-        self.saved_step = None
+        self.saved_steps = []
         self.is_final = False  # 重置訊號
         
         # 洗手歷史資訊
@@ -85,7 +85,7 @@ class HandWashTracker:
         trigger_logout = False
         export_data = None
         self.sent_msg = None
-        self.saved_step = None
+        self.saved_steps = []
 
         # 手
         hand_mask = np.isin(detections['label'], self.label_bare_hand + self.label_gloved_hand)
@@ -100,17 +100,21 @@ class HandWashTracker:
             if self.no_hand_start_time is None:
                 self.no_hand_start_time = self.now
             self.no_hand_elapsed = self.now - self.no_hand_start_time
-            if self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay']:
-                self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
+            if self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay'] and self.is_login:
+                #self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
+                pass
+            if self.no_hand_elapsed >= self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']:
+                self.is_final = True
+                self.finish_reason = 'No hand'
         else:
             self.no_hand_start_time = None  # reset
-            if self.pub_no_hand:
-                self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
+            if self.pub_no_hand and self.is_login:
+                #self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
                 self.pub_no_hand = False  # reset
             self.no_hand_elapsed = -1  # reset
 
             if not self.is_login:
-                self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
+                #self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
                 self.is_login = True
 
         # 狀態
@@ -128,8 +132,7 @@ class HandWashTracker:
 
         # 是否結束
         if self.is_final:
-            export_data = self._finalize_session()
-            self.reset()
+            export_data = self.stop()
 
         return export_data, trigger_logout
 
@@ -241,7 +244,7 @@ class HandWashTracker:
                           self.end_times[step_id], self.step_confirmed_times[step_id], 
                           self.durations[step_id], self.frames[step_id], 
                           int(self.is_detecting_steps[step_id]))
-        self.saved_step = step_id
+        self.saved_steps.append(step_id)
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
         logger.debug(f'[{self.zone_name}] last step in sequence: {self.steps[-1]}')
 
@@ -259,6 +262,9 @@ class HandWashTracker:
         return not is_pass and time_match and count_match
 
     def _get_final_data(self):
+        if len(self.steps) == 0:
+            return
+
         res = {
             "Store ID": "test", 
             "Step Sequence": self.steps.ids.copy(),
@@ -278,7 +284,6 @@ class HandWashTracker:
 
     def _finalize_session(self):
         """ 結束 Session 並回傳資料 """
-        self.do_reset = True
         final_data = self._get_final_data()
         n_step = len(self.steps)
         if n_step == 0:
@@ -299,7 +304,7 @@ class HandWashTracker:
         self.debug_info['detected_steps'] = self.steps.detected_steps
         self.debug_info['detecting_step'] = self.detecting_step
         self.debug_info['sent_msg'] = self.sent_msg
-        self.debug_info['saved_step'] = self.saved_step
+        self.debug_info['saved_steps'] = self.saved_steps
         self.debug_info['now'] = self.now
 
     def reset_step_info(self, step_id):
@@ -318,9 +323,12 @@ class HandWashTracker:
     def _publish_status(self, topic, cmd, fatal=False):
         msg = self._create_mqtt_message(cmd)
         if msg and (fatal or self.now - self.pub_time >= self.pub_period):
-            level = 'INFO' if fatal else 'TRACE'
+            if fatal or msg.get('cmd') == 'Reset' and float(msg.get('time')) == 0:
+                level = 'INFO'
+            else:
+                level = 'TRACE'
             self.sent_msg = self.mqtt.publish(topic, msg, level) 
-            # 沒有
+            # 沒有發送訊息
             if self.sent_msg is not None and cmd == 'Reset':
                 self.pub_no_hand = True
             # 控制發送頻率
@@ -362,7 +370,7 @@ class HandWashTracker:
         把當下所有 step_confirmed 但尚未寫入 self.steps 的步驟，
         依 start_time 排序後補入 self.steps，再執行 finalize。
         """
-        logger.warning(f'[{self.zone_name}] Force stop triggered !')
+        logger.info(f'[{self.zone_name}] Session stop because of {self.finish_reason} !')
 
         # 收集所有「已確認但尚未寫入」的步驟
         pending = []
@@ -371,9 +379,13 @@ class HandWashTracker:
                 continue
             if self.start_times[step_id] is None:
                 continue
-            # 若 steps 裡已有相同 step_id 且 start_time 相同，跳過避免重複寫入
+            # 跳過相同
             already_recorded = any(
-                s.id == step_id and s.start_time == self.start_times[step_id]
+                (
+                    s.id == step_id and 
+                    s.start_time == self.start_times[step_id] and 
+                    s.end_time == self.end_times[step_id]
+                )
                 for s in self.steps
             )
             if already_recorded:
@@ -381,13 +393,10 @@ class HandWashTracker:
             pending.append(step_id)
 
         # 依 start_time 排序後寫入
-        pending.sort(key=lambda sid: self.start_times[sid])
+        pending.sort(key=lambda sid: self.end_times[sid])
         for step_id in pending:
-            logger.info(f'[{self.zone_name}] Force stop: saving pending step {step_id}')
             self._update_record(step_id)
 
-        self.finish_reason = 'force stop'
-        self.is_final = True
         export_data = self._finalize_session()
         self.reset()
         return export_data

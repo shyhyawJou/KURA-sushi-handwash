@@ -239,7 +239,6 @@ class App_HandWash:
                 logger.error(f"{traceback.format_exc()}")
 
         pbar.close()
-        self.stop()
 
     def handle_exit(self, signum, frame):
         if signum == signal.SIGTERM:
