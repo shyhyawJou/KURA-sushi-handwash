@@ -100,10 +100,11 @@ class HandWashTracker:
             if self.no_hand_start_time is None:
                 self.no_hand_start_time = self.now
             self.no_hand_elapsed = self.now - self.no_hand_start_time
-            if self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay'] and self.is_login:
+            if self.is_login and self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay']:
                 #self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
                 pass
-            if self.is_login and self.no_hand_elapsed >= self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']:
+            timeout = self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']
+            if self.is_login and self.no_hand_elapsed >= timeout:
                 self.is_final = True
                 self.finish_reason = 'No hand'
         else:
@@ -119,7 +120,8 @@ class HandWashTracker:
 
         # 狀態
         if self.is_login:
-            self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
+            pass
+            #self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
 
         # 更新 debug 資料
         self._update_debug_info(hands)
@@ -365,7 +367,7 @@ class HandWashTracker:
 
         return msgs
 
-    def stop(self):
+    def stop(self, reason):
         """
         強制停止當前 session。
         把當下所有 step_confirmed 但尚未寫入 self.steps 的步驟，
