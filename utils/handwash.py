@@ -1,6 +1,5 @@
 import numpy as np
 from numpy.linalg import norm as np_norm
-from datetime import datetime, timezone
 from time import time, sleep
 from threading import Event
 from loguru import logger
@@ -250,19 +249,6 @@ class HandWashTracker:
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
         logger.debug(f'[{self.zone_name}] last step in sequence: {self.steps[-1]}')
 
-    def _is_step_passed(self, step):
-        idx = step - 1
-        min_count = self.sys_cfg[idx]['washcountmax']
-        min_time = self.sys_cfg[idx]['washtimemax']
-        is_pass = self.detecting_step > step  # 是否已檢測過該步驟
-        name = ''
-        if min_time == 0:
-            time_match = self.collision_buffers[step] >= self.cfg[name]
-        else:
-            time_match = self.durations[step] >= min_time
-        count_match = self.counts[idx] >= min_count
-        return not is_pass and time_match and count_match
-
     def _get_final_data(self):
         if len(self.steps) == 0:
             return {}
@@ -410,9 +396,9 @@ class HandWashTracker:
         old = self.detecting_step
         self.detecting_step = self.next_step
         if self.detecting_step == 13:
-            self.finish_reason = 'all flags are 1'
             self.detecting_step = 1
             self.is_final = True
+            self.finish_reason = 'all flags are 1'
             # 避免和主執行緒存了同一個 step 12
             if len(self.steps) > 0 and self.steps[-1].id != 12:
                 self._update_record(12)
