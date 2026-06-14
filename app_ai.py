@@ -107,11 +107,7 @@ class App_HandWash:
                         logger.error(f"cannot read frame, skip this frame !")
                         continue
 
-                    # 如果左右都沒登入
-                    if not self.is_ai_login and not self.is_left_login and not self.is_right_login:
-                        sleep(0.01)
-                        continue
-                         
+           
                     # AI Inference
                     with ai_timer:
                         scores, boxes, pred_labels = self.ai_model(frame)
@@ -160,29 +156,23 @@ class App_HandWash:
                     now = time()
 
                     with handwash_timer:
-                        if not self.is_alarm and (self.is_left_login or self.is_ai_login):
-                            res_l, trigger_logout = self.tracker_left.update(
+                        if not self.is_alarm:
+                            res_l = self.tracker_left.update(
                                 left_dets, 
                                 frame_copy,
                                 now
                             )
                             if res_l: 
                                 self.csv_manager.write_record(res_l)
-                            if trigger_logout:
-                                self.is_left_login = False
-                                logger.warning('[Left] Logout, Stop detection !')
-                        
-                        if not self.is_alarm and (self.is_right_login or self.is_ai_login):
-                            res_r, trigger_logout = self.tracker_right.update(
+
+                        if not self.is_alarm:
+                            res_r = self.tracker_right.update(
                                 right_dets, 
                                 frame_copy,
                                 now
                             )
                             if res_r:
                                 self.csv_manager.write_record(res_r)
-                            if trigger_logout:
-                                self.is_right_login = False
-                                logger.warning('[Right] Logout, Stop detection !')
 
                     # visualization
                     with draw_result_timer:
@@ -237,13 +227,14 @@ class App_HandWash:
 
     def stop(self):
         # CSV
-        data = self.tracker_left.stop()
-        if data.get('Step Sequence'):
-            self.csv_manager.write_record(data)
-        data = self.tracker_right.stop()
-        if data.get('Step Sequence'):
-            self.csv_manager.write_record(data)
+        res_l = self.tracker_left.stop()
+        res_r = self.tracker_right.stop()
+        if res_l:
+            self.csv_manager.write_record(res_l)
+        if res_r:
+            self.csv_manager.write_record(res_r)
 
+        # stop others
         if not self.is_running:
             return
         self.is_running = False

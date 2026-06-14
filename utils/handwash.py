@@ -1,6 +1,5 @@
 import numpy as np
 from numpy.linalg import norm as np_norm
-from datetime import datetime, timezone
 from time import time, sleep
 from threading import Event
 from loguru import logger
@@ -47,10 +46,12 @@ class HandWashTracker:
         self.detecting_step = self.cfg['init_step_num']
         self.pub_time = float('-inf')
         self.debug_info = {}
-        self.is_no_hand_timeout = True
         self.is_login = False
         self.sent_msg = None
         self.no_hand_elapsed = -1
+        self.has_hand_elapsed = -1
+        self.no_hand_start_time = None
+        self.has_hand_start_time = None
         self.pub_no_hand = False
         self.saved_steps = []
         self.is_final = False  # 重置訊號
@@ -59,17 +60,16 @@ class HandWashTracker:
         self.steps = Step_History()
 
         # 當下洗手資訊
-        self.frames = MyDict({i: 0 for i in range(0, 13)})
-        self.idle_frames = MyDict({i: 0 for i in range(0, 13)})
-        self.counts = MyDict({i: 0 for i in range(0, 13)})
-        self.start_times = MyDict({i: None for i in range(0, 13)})
-        self.step_confirmed_times = MyDict({i: None for i in range(0, 13)})
-        self.end_times = MyDict({i: None for i in range(0, 13)})
-        self.step_confirmed = MyDict({i: False for i in range(0, 13)})
-        self.last_start_times = MyDict({i: None for i in range(0, 13)})
-        self.durations = MyDict({i: 0 for i in range(0, 13)})
-        self.is_detecting_steps = MyDict({i: False for i in range(0, 13)})
-        self.no_hand_start_time = None
+        self.frames = MyDict({i: 0 for i in range(1, 13)})
+        self.idle_frames = MyDict({i: 0 for i in range(1, 13)})
+        self.counts = MyDict({i: 0 for i in range(1, 13)})
+        self.start_times = MyDict({i: None for i in range(1, 13)})
+        self.step_confirmed_times = MyDict({i: None for i in range(1, 13)})
+        self.end_times = MyDict({i: None for i in range(1, 13)})
+        self.step_confirmed = MyDict({i: False for i in range(1, 13)})
+        self.last_start_times = MyDict({i: None for i in range(1, 13)})
+        self.durations = MyDict({i: 0 for i in range(1, 13)})
+        self.is_detecting_steps = MyDict({i: False for i in range(1, 13)})
         self.is_switch_step = False
         self.next_step = None
 
@@ -80,9 +80,7 @@ class HandWashTracker:
 
     def update(self, detections, img, now):
         self.now = now
-        h, w = img.shape[:2]
         
-        trigger_logout = False
         export_data = None
         self.sent_msg = None
         self.saved_steps = []
@@ -97,31 +95,51 @@ class HandWashTracker:
 
         # 有手沒手
         if len(hands) == 0:
+            # reset
+            self.has_hand_start_time = None
+            self.has_hand_elapsed = -1
+
+            # no hand start time
             if self.no_hand_start_time is None:
                 self.no_hand_start_time = self.now
+
+            # no hand elapsed
             self.no_hand_elapsed = self.now - self.no_hand_start_time
-            if self.is_login and self.no_hand_elapsed >= self.time_cfg['pub_no_hand_delay']:
-                #self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=False)
-                pass
+            
+            # publish no hand
+            if self.is_login and self.no_hand_elapsed >= self.time_cfg['pub_hand_delay']:
+                self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=not self.pub_no_hand)
+
+            # UI become logout
             timeout = self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']
-            if self.is_login and self.no_hand_elapsed >= timeout:
+            if self.is_login and self.no_hand_elapsed >= timeout + self.time_cfg['pub_hand_delay']:
                 self.is_final = True
                 self.finish_reason = 'No hand'
         else:
-            self.no_hand_start_time = None  # reset
-            if self.pub_no_hand and self.is_login:
-                #self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
-                self.pub_no_hand = False  # reset
-            self.no_hand_elapsed = -1  # reset
+            # reset
+            self.no_hand_start_time = None
+            self.no_hand_elapsed = -1
 
-            if not self.is_login:
-                #self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
+            # has hand start time
+            if self.has_hand_start_time is None:
+                self.has_hand_start_time = self.now
+
+            # has hand elapsed
+            self.has_hand_elapsed = self.now - self.has_hand_elapsed
+
+            # publish has hand
+            delay = self.time_cfg['pub_hand_delay']
+            if self.pub_no_hand and self.is_login and self.has_hand_elapsed >= delay:
+                self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
+
+            # AI login
+            if not self.is_login and self.has_hand_elapsed >= delay:
+                self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
                 self.is_login = True
 
         # 狀態
         if self.is_login:
-            pass
-            #self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
+            self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
 
         # 更新 debug 資料
         self._update_debug_info(hands)
@@ -136,7 +154,7 @@ class HandWashTracker:
         if self.is_final:
             export_data = self.stop()
 
-        return export_data, trigger_logout
+        return export_data
 
     def _check_step1_to_11(self, detections, hands):
         mask = np.isin(detections['label'], list(self.step_labels.values()))
@@ -250,19 +268,6 @@ class HandWashTracker:
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
         logger.debug(f'[{self.zone_name}] last step in sequence: {self.steps[-1]}')
 
-    def _is_step_passed(self, step):
-        idx = step - 1
-        min_count = self.sys_cfg[idx]['washcountmax']
-        min_time = self.sys_cfg[idx]['washtimemax']
-        is_pass = self.detecting_step > step  # 是否已檢測過該步驟
-        name = ''
-        if min_time == 0:
-            time_match = self.collision_buffers[step] >= self.cfg[name]
-        else:
-            time_match = self.durations[step] >= min_time
-        count_match = self.counts[idx] >= min_count
-        return not is_pass and time_match and count_match
-
     def _get_final_data(self):
         if len(self.steps) == 0:
             return {}
@@ -331,16 +336,20 @@ class HandWashTracker:
                 level = 'TRACE'
             self.sent_msg = self.mqtt.publish(topic, msg, level) 
             # 沒有發送訊息
-            if self.sent_msg is not None and cmd == 'Reset':
-                self.pub_no_hand = True
+            if self.sent_msg is not None:
+                if cmd == 'Reset':
+                    self.pub_no_hand = True
+                elif cmd == 'ResetCancel':
+                    self.pub_no_hand = False
             # 控制發送頻率
             if cmd == 'status':
                 self.pub_time = self.now
 
     def _create_mqtt_message(self, cmd):
         if cmd == 'Reset':
-            max_time = self.sys_cfg[self.detecting_step-1]['timeoutmax']
-            remain = max(max_time - self.no_hand_elapsed, 0)
+            timeout = self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']
+            delay = self.time_cfg['pub_hand_delay']
+            remain = max(timeout - (self.no_hand_elapsed - delay), 0)
             msgs = {"cmd": cmd, "side": self.zone_name.lower(), "time": str(remain)}
         elif cmd == 'ResetCancel':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
@@ -353,6 +362,8 @@ class HandWashTracker:
         elif cmd == 'AlarmCancel':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'status':
+            if not self.durations.get(self.detecting_step):
+                return
             step = self.detecting_step
             msgs = {
                 "step_id": f"Step{step}",
@@ -367,14 +378,12 @@ class HandWashTracker:
 
         return msgs
 
-    def stop(self, reason):
+    def stop(self):
         """
         強制停止當前 session。
         把當下所有 step_confirmed 但尚未寫入 self.steps 的步驟，
         依 start_time 排序後補入 self.steps，再執行 finalize。
         """
-        logger.info(f'[{self.zone_name}] Session stop because of {self.finish_reason} !')
-
         # 收集所有「已確認但尚未寫入」的步驟
         pending = []
         for step_id in range(1, 13):
@@ -395,12 +404,24 @@ class HandWashTracker:
                 continue
             pending.append(step_id)
 
-        # 依 start_time 排序後寫入
-        pending.sort(key=lambda sid: self.end_times[sid])
+        # 依 step confirmed time 排序後寫入
+        pending.sort(key=lambda sid: self.step_confirmed_times[sid])
         for step_id in pending:
             self._update_record(step_id)
 
         export_data = self._finalize_session()
+        # check
+        if export_data:
+            detecting_steps = set()
+            data = zip(export_data['Step Sequence'], export_data['Is Detecting Step'])
+            for step_id, is_detecting_step in data:
+                if is_detecting_step:
+                    detecting_steps.add(step_id)
+            if len(detecting_steps) == 12:
+                self.finish_reason = 'all completed'
+
+        logger.info(f'[{self.zone_name}] Session stop because of {self.finish_reason} !')
+
         self.reset()
         return export_data
 
@@ -409,13 +430,6 @@ class HandWashTracker:
             return
         old = self.detecting_step
         self.detecting_step = self.next_step
-        if self.detecting_step == 13:
-            self.finish_reason = 'all flags are 1'
-            self.detecting_step = 1
-            self.is_final = True
-            # 避免和主執行緒存了同一個 step 12
-            if len(self.steps) > 0 and self.steps[-1].id != 12:
-                self._update_record(12)
         self.reset_step_info(self.detecting_step)
         logger.success(f'[{self.zone_name}] Detecting step switched, {old} -> {self.detecting_step} !')
 
@@ -428,7 +442,6 @@ class HandWashTracker:
         logger.warning('UI become login !')
 
     def logout_callback(self, cmd):
-        self.is_switch_step = True
-        self.next_step = 13
         self.is_login = False
+        self.is_final = True
         logger.warning('UI become logout !')

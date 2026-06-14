@@ -19,7 +19,8 @@ AI:
         #path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7.onnx'
         #path: 'best_0.9200_0.9680_epoch_8_kura_spray_alcohol_v11_fp16.dla'
         #path: 'best_0.9220_0.9700_epoch_11_kura_spray_alcohol_v14_fp16.dla'
-        path: 'best_0.9370_0.9760_epoch_2_kura_spray_alcohol_v15_fp16.dla'
+        #path: 'best_0.9370_0.9760_epoch_2_kura_spray_alcohol_v15_fp16.dla'
+        path: 'best_0.8960_0.9540_epoch_16_kura_spray_alcohol_v17_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
@@ -164,7 +165,7 @@ logic:
     time_parameter:
         time_scale: 1.                # 因為 server 跑速快很多
         trigger_pause: 1.0            # trigger 後多久切到下一步驟
-        pub_no_hand_delay: 1.0        # 連續幾秒沒手後才開始通知系統
+        pub_hand_delay: 0.5        # 連續幾秒手狀態切換後才開始通知系統
 
     # 前端和我共用的參數
     system_parameter: '/mnt/reserved/Flet/assets/Json/wash_steps.json'
