@@ -53,6 +53,7 @@ class HandWashTracker:
         self.no_hand_start_time = None
         self.has_hand_start_time = None
         self.pub_no_hand = False
+        self.pub_no_hand_zero = False
         self.saved_steps = []
         self.is_final = False  # 重置訊號
         
@@ -111,8 +112,9 @@ class HandWashTracker:
                 self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=not self.pub_no_hand)
 
             # UI become logout
-            timeout = self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']
-            if self.is_login and self.no_hand_elapsed >= timeout + self.time_cfg['pub_hand_delay']:
+            #timeout = self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']
+            #if self.is_login and self.no_hand_elapsed >= timeout + self.time_cfg['pub_hand_delay']:
+            if self.is_login and self.pub_no_hand_zero:
                 self.is_final = True
                 self.finish_reason = 'No hand'
         else:
@@ -339,6 +341,8 @@ class HandWashTracker:
             if self.sent_msg is not None:
                 if cmd == 'Reset':
                     self.pub_no_hand = True
+                    if float(msg['time']) == 0:
+                        self.pub_no_hand_zero = True
                 elif cmd == 'ResetCancel':
                     self.pub_no_hand = False
             # 控制發送頻率
