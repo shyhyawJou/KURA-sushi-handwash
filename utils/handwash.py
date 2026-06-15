@@ -296,7 +296,7 @@ class HandWashTracker:
         final_data = self._get_final_data()
         n_step = len(self.steps)
         if n_step == 0:
-            logger.warning(f'[{self.zone_name}] Completed with no any step! Skip to save CSV !')
+            logger.debug(f'[{self.zone_name}] Completed with no any step! Skip to save CSV !')
         else:
             logger.info(f'[{self.zone_name}] Completed with {n_step} steps! ')
         return final_data
