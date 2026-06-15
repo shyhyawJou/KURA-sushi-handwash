@@ -16,7 +16,7 @@ import glob
 SOURCE_DIR = "/mnt/reserved/record/stream"   # 影片來源資料夾
 DEFAULT_MOUNT = "/mnt/usb"                   # 預設指定的掛載點
 CURRENT_MOUNT = ''
-CHECK_INTERVAL = 30                          # 檢查間隔（秒）
+CHECK_INTERVAL = 1800                          # 檢查間隔（秒）
 LOG_PATH = "/mnt/reserved/usb_autocopy.log"  # LOG 路徑
 DELETE_OLD = True
 DELETE_FAILED = True
