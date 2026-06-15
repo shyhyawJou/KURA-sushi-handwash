@@ -2,14 +2,8 @@ import numpy as np
 from pathlib import Path as p
 import cv2
 from time import time
-import onnxruntime as ort
 from collections.abc import Sequence, Iterable
 from loguru import logger
-
-try:
-    from tensorflow.lite.python.interpreter import Interpreter
-except:
-    from tflite_runtime.interpreter import Interpreter
 
 
 
@@ -166,6 +160,7 @@ class RTMDet_ONNX(RTMDet):
         return y
     
     def _load_model(self, path):
+        import onnxruntime as ort
         providers = ['CUDAExecutionProvider']
         self.model = ort.InferenceSession(path, providers=providers)
         self.input_name = self.model.get_inputs()[0].name
@@ -182,6 +177,11 @@ class RTMDet_TFLITE(RTMDet):
         return y
     
     def _load_model(self, path):
+        try:
+            from tensorflow.lite.python.interpreter import Interpreter
+        except:
+            from tflite_runtime.interpreter import Interpreter
+
         self.model = Interpreter(path)
         self.input_id = self.model.get_input_details()[0]['index']
         self.output_id = self.model.get_output_details()[0]['index']
