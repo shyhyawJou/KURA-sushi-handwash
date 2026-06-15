@@ -7,6 +7,7 @@ BROKER     = "localhost"
 PORT       = 1883
 TOPIC_RECV = "handwash/process"
 TOPIC_SEND = "handwash/system"
+TOPIC_CTRL = "handwash/system"   # 訂閱來自系統的控制指令（如 Reset）
 JSON_PATH  = "wash_steps.json"
 TIME_SCALE = 0.1666
 
@@ -58,14 +59,46 @@ states: dict[str, StepState] = {
 }
 
 def on_connect(client, userdata, flags, rc):
-    logger.info(f"MQTT connected (rc={rc}), subscribed → {TOPIC_RECV}")
+    logger.info(f"MQTT connected (rc={rc}), subscribed → {TOPIC_RECV}, {TOPIC_CTRL}")
     client.subscribe(TOPIC_RECV)
+    client.subscribe(TOPIC_CTRL)
+
+def handle_reset(client, data: dict):
+    """
+    處理 Reset 指令。
+    若 time == 0，視為逾時，對該 side 發送 Logout 並重置狀態。
+    """
+    side = data.get("side", "")
+    if side not in states:
+        logger.warning(f"[Reset] unknown side: {side}")
+        return
+
+    remain = float(data.get("time", 0))
+    logger.info(f"[RECV] Reset side={side} remain={remain}")
+
+    if remain == 0:
+        logger.warning(f"[{side}] Reset timeout (time=0), triggering Logout")
+        cmd     = {"cmd": "Logout", "side": side}
+        payload = json.dumps(cmd)
+        client.publish(TOPIC_SEND, payload)
+        logger.info(f"[SEND] topic={TOPIC_SEND} payload={payload}")
+        states[side] = StepState()   # 重置狀態回第一步
 
 def on_message(client, userdata, msg):
     try:
         data = json.loads(msg.payload.decode())
     except json.JSONDecodeError:
         logger.warning(f"invalid JSON: {msg.payload}")
+        return
+
+    cmd = data.get("cmd")
+
+    if cmd == "Reset":
+        handle_reset(client, data)
+        return
+
+    # 自己發出的指令（Logout / NextStep）會被自己收到，直接忽略
+    if cmd in ("Logout", "NextStep", "AILogin", "Reset", "ResetCancel"):
         return
 
     side = data["side"]

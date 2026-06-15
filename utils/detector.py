@@ -2,14 +2,8 @@ import numpy as np
 from pathlib import Path as p
 import cv2
 from time import time
-import onnxruntime as ort
 from collections.abc import Sequence, Iterable
 from loguru import logger
-
-try:
-    from tensorflow.lite.python.interpreter import Interpreter
-except:
-    from tflite_runtime.interpreter import Interpreter
 
 
 
@@ -156,6 +150,43 @@ class RTMDet:
         labels = [[classes.index(cls) for cls in group['class']] for group in self.agnostic_nms]
         return labels
     
+
+class RTMDet_ONNX(RTMDet):
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
+
+    def _forward(self, x):
+        y = self.model.run(None, {self.input_name: x})[0]
+        return y
+    
+    def _load_model(self, path):
+        import onnxruntime as ort
+        providers = ['CUDAExecutionProvider']
+        self.model = ort.InferenceSession(path, providers=providers)
+        self.input_name = self.model.get_inputs()[0].name
+
+
+class RTMDet_TFLITE(RTMDet):
+    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
+        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
+
+    def _forward(self, x):
+        self.model.set_tensor(self.input_id, x)
+        self.model.invoke()
+        y = self.model.get_tensor(self.output_id)
+        return y
+    
+    def _load_model(self, path):
+        try:
+            from tensorflow.lite.python.interpreter import Interpreter
+        except:
+            from tflite_runtime.interpreter import Interpreter
+
+        self.model = Interpreter(path)
+        self.input_id = self.model.get_input_details()[0]['index']
+        self.output_id = self.model.get_output_details()[0]['index']
+        self.model.allocate_tensors()
+
 
 class RTMDet_DLA(RTMDet):
     def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
