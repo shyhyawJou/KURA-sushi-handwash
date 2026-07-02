@@ -185,9 +185,9 @@ class Video:
                 os.makedirs(base_dir, exist_ok=True)
                 logger.info(f'影片資料夾: {base_dir}, 會錄影的時段: {self.working_hours}')
                 
-                self.video_path = f'{base_dir}/{video_path.stem}_result.mp4'
-                self.time_path = f'{base_dir}/{video_path.stem}_result.csv'
-                self.finish_marker_path = f'{base_dir}/{video_path.stem}_result.txt'
+                self.video_path = f'{base_dir}/{video_path.stem}{self.suffix}.mp4'
+                self.time_path = f'{base_dir}/{video_path.stem}{self.suffix}.csv'
+                self.finish_marker_path = f'{base_dir}/{video_path.stem}{self.suffix}.txt'
             else:
                 base_dir = f'{self.base_dir}/{self.date}'
                 os.makedirs(base_dir, exist_ok=True)
