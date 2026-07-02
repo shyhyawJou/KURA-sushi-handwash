@@ -142,7 +142,8 @@ class HandWashTracker:
                 self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
 
             # AI login
-            if not self.is_login and self.is_hand_login and self.has_hand_elapsed >= delay:
+            is_hand_login = self.login_mode == 'hand'
+            if not self.is_login and is_hand_login and self.has_hand_elapsed >= delay:
                 self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
                 self.is_login = True
 
@@ -302,6 +303,10 @@ class HandWashTracker:
 
     def _finalize_session(self):
         """ 結束 Session 並回傳資料 """
+        # finish reason
+        if self.finish_reason is None:  # 被 kill
+            self.finish_reason = 'killed'
+
         final_data = self._get_final_data()
         n_step = len(self.steps)
         if n_step == 0:
@@ -342,7 +347,10 @@ class HandWashTracker:
         msg = self._create_mqtt_message(cmd)
         if msg and (fatal or self.now - self.pub_time >= self.pub_period):
             if fatal or msg.get('cmd') == 'Reset' and float(msg.get('time')) == 0:
-                level = 'INFO'
+                if msg.get('cmd') == 'Reset' and float(msg.get('time')) == 0:
+                    level = 'WARNING'
+                else:
+                    level = 'INFO'
             else:
                 level = 'TRACE'
             self.sent_msg = self.mqtt.publish(topic, msg, level) 
@@ -429,6 +437,7 @@ class HandWashTracker:
             self._update_record(step_id)
 
         export_data = self._finalize_session()
+
         # check
         if export_data:
             detecting_steps = set()
@@ -437,7 +446,7 @@ class HandWashTracker:
                 if is_detecting_step:
                     detecting_steps.add(step_id)
 
-        logger.info(f'[{self.zone_name}] Session stop because of {self.finish_reason} !')
+        logger.warning(f'[{self.zone_name}] Session stop because of "{self.finish_reason}" !')
 
         self.reset()
         return export_data
