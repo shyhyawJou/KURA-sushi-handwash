@@ -255,7 +255,7 @@ class Video:
         with self.lock:
             if writer.isOpened():
                 self.video_writer = writer
-                logger.info(f'開始把 frame 寫入影片: {self.video_path} !')
+                logger.success(f'開始把 frame 寫入影片: {self.video_path} !')
                 logger.info(f'影片設定: {pipeline}')
             else:
                 self.video_writer = None
@@ -266,7 +266,7 @@ class Video:
         with self.lock:
             try:
                 self.time_writer = open(self.time_path, 'w')
-                logger.info(f'開始把 frame 時戳寫入檔案: {self.time_path} !')
+                logger.success(f'開始把 frame 時戳寫入檔案: {self.time_path} !')
             except:
                 self.time_writer = None
                 logger.error(f'{traceback.format_exc()}')

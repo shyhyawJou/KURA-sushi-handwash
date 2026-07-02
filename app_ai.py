@@ -54,6 +54,9 @@ class App_HandWash:
         self.is_ai_login = True
         self.is_alarm = False
 
+        # 重要標籤
+        self.wash_labels = [self.tracker_left.step_labels[i] for i in range(1, 12)]
+
         # mqtt callback
         callbacks = {
             'Login': {'left': self.tracker_left.login_callback, 
@@ -107,7 +110,6 @@ class App_HandWash:
                     if not ret:
                         logger.error(f"cannot read frame, skip this frame !")
                         continue
-
            
                     # AI Inference
                     with ai_timer:
@@ -200,7 +202,7 @@ class App_HandWash:
                     with video_timer:
                         self.origin_video.write_frame(frame)
                         self.result_video.write_frame(frame_copy)
-                        if len(boxes) > 0:
+                        if np.isin(pred_labels, self.wash_labels).any():
                             self.predict_video.write_frame(frame)
 
                 # log time elapsed
