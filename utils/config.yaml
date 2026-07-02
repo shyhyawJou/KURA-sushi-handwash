@@ -205,7 +205,7 @@ logic:
         action_frame: 20
         init_step_num: 1
 
-    login: 'barcode'  # 'hand' or 'barcode'
+    login: 'hand'  # 'hand' or 'barcode'
 
 udp:
     ip: '127.0.0.1'

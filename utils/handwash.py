@@ -303,6 +303,10 @@ class HandWashTracker:
 
     def _finalize_session(self):
         """ 結束 Session 並回傳資料 """
+        # finish reason
+        if self.finish_reason is None:  # 被 kill
+            self.finish_reason = 'killed'
+
         final_data = self._get_final_data()
         n_step = len(self.steps)
         if n_step == 0:
@@ -433,6 +437,7 @@ class HandWashTracker:
             self._update_record(step_id)
 
         export_data = self._finalize_session()
+
         # check
         if export_data:
             detecting_steps = set()
@@ -441,7 +446,7 @@ class HandWashTracker:
                 if is_detecting_step:
                     detecting_steps.add(step_id)
 
-        logger.info(f'[{self.zone_name}] Session stop because of {self.finish_reason} !')
+        logger.warning(f'[{self.zone_name}] Session stop because of "{self.finish_reason}" !')
 
         self.reset()
         return export_data
