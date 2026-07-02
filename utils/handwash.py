@@ -91,8 +91,8 @@ class HandWashTracker:
         self.sent_msg = None
         self.saved_steps = []
 
-        # barcode 模式下且沒登入
-        if self.login_mode == 'barcode' and not self.is_login:
+        # scanner 模式下且沒登入
+        if self.login_mode == 'scanner' and not self.is_login:
             return None
 
         # 手

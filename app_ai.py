@@ -112,7 +112,7 @@ class App_HandWash:
         while self.is_running:
             try:
                 is_login = self.tracker_left.is_login or self.tracker_right.is_login
-                if CFG['logic']['login'] == 'barcode' and not is_login:
+                if CFG['logic']['login'] == 'scanner' and not is_login:
                     sleep(0.05)
                     continue
 
