@@ -231,7 +231,9 @@ logic:
         action_frame: 20
         init_step_num: 1
 
-    login: 'hand'  # 'hand' or 'scanner'
+    login:
+        0: 'hand'
+        1: 'scanner'
 
 udp:
     ip: '127.0.0.1'

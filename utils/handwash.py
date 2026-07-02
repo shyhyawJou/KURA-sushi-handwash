@@ -14,7 +14,9 @@ class HandWashTracker:
         self.cfg = logic_cfg['handwash_parameter']
         self.time_cfg = logic_cfg['time_parameter']
         self.sys_cfg = sys_cfg['stages']
-        self.login_mode = logic_cfg['login']
+        self.login_mode = logic_cfg['login'][sys_cfg['TriggerMode']]
+        self.valid_login_modes = set(logic_cfg['login'].values())
+        logger.warning(f'[{zone_name}] current login mode is "{self.login_mode}"')
 
         # 重要變數
         self.zone_name = zone_name
@@ -472,5 +474,17 @@ class HandWashTracker:
                     f'[User Name]: {self.user_name} !')
 
     def logout_callback(self, cmd):
-        #self.is_final = True
         logger.warning(f'[{self.zone_name}] UI became logout !')
+
+    def switch_login_mode_callback(self, cmd):
+        if cmd['mode'] not in self.valid_login_modes:
+            logger.error(f'[{self.zone_name}] Invaild login mode: {cmd["mode"]}')
+            return
+
+        if self.login_mode == cmd['mode']:
+            logger.warning(f'[{self.zone_name}] login mode is the same as original, '
+                           f'ignored the command !')
+        else:
+            logger.warning(f'[{self.zone_name}] login mode became {cmd["mode"]}, '
+                           f'original mode is {self.login_mode} !')
+            self.login_mode = cmd['mode']

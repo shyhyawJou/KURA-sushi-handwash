@@ -101,7 +101,7 @@ def on_message(client, userdata, msg):
     if cmd in ("Logout", "NextStep", "AILogin", "Reset", "ResetCancel", 'Login'):
         return
 
-    side = data["side"]
+    side = data.get("side")
     if side not in states:
         logger.warning(f"unknown side: {side}")
         return

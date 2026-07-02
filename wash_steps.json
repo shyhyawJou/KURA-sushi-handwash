@@ -1,17 +1,160 @@
 {
   "total_stages": 12,
   "stages": [
-    { "id": 1, "title": "1. 流水で水洗い", "desc": "全体をしっかり濡らす", "img": "step01.png", "items": ["1.動作確認"], "washcountmax": "0", "washtimemax": "0", "timeoutmax": "5" },
-    { "id": 2, "title": "2. ハンドソープをつける", "desc": "適切な量を手に取る", "img": "step02.png", "items": ["1.動作確認"], "washcountmax": "0", "washtimemax": "0", "timeoutmax": "5" },
-    { "id": 3, "title": "3. 手のひらをこする", "desc": "しっかり泡立たせる", "img": "step03.png", "items": ["1.動作確認", "2.実施回數"], "washcountmax": "10", "washtimemax": "0", "timeoutmax": "5" },
-    { "id": 4, "title": "4. 手のこうをこする", "desc": "汚れを落とすように洗う", "img": "step04.png", "items": ["1.動作確認", "2.実施回數", "3.実施時間"], "washcountmax": "10", "washtimemax": "5", "timeoutmax": "5" },
-    { "id": 5, "title": "5. 指の間をこする", "desc": "指を組み合わせて洗う", "img": "step05.png", "items": ["1.動作確認", "2.実施回數", "3.実施時間"], "washcountmax": "10", "washtimemax": "5", "timeoutmax": "5" },
-    { "id": 6, "title": "6. 親指・手首をこする", "desc": "ねじり洗いで汚れを落とす", "img": "step06.png", "items": ["1.動作確認", "2.実施回數", "3.実施時間"], "washcountmax": "10", "washtimemax": "5", "timeoutmax": "5" },
-    { "id": 7, "title": "7. 爪の間をこする", "desc": "ブラシで細部まで洗浄", "img": "step07.png", "items": ["1.動作確認", "2.実施時間"], "washcountmax": "0", "washtimemax": "5", "timeoutmax": "5" },
-    { "id": 8, "title": "8. 流水で泡を流す", "desc": "残留物のないように", "img": "step08.png", "items": ["1.動作確認", "2.実施時間"], "washcountmax": "0", "washtimemax": "20", "timeoutmax": "5" },
-    { "id": 9, "title": "9. ペーパータオルでふく", "desc": "清潔なタオルで乾燥", "img": "step09.png", "items": ["1.動作確認"], "washcountmax": "0", "washtimemax": "0", "timeoutmax": "5" },
-    { "id": 10, "title": "10. スーパーMで殺菌・乾燥", "desc": "高出力殺菌ライト", "img": "step10.png", "items": ["1.動作確認", "2.実施時間"], "washcountmax": "0", "washtimemax": "20", "timeoutmax": "5" },
-    { "id": 11, "title": "11. アルコールを噴きつける", "desc": "手指全体に噴霧", "img": "step11.png", "items": ["1.動作確認"], "washcountmax": "0", "washtimemax": "0", "timeoutmax": "5" },
-    { "id": 12, "title": "12. アルコールをもみ込む", "desc": "乾燥するまで持續", "img": "step12.png", "items": ["1.動作確認"], "washcountmax": "0", "washtimemax": "0", "timeoutmax": "5" }
-  ]
+    {
+      "id": 1,
+      "title": "1. 流水で水洗い",
+      "desc": "全体をしっかり濡らす",
+      "img": "step01.png",
+      "items": [
+        "1.動作確認"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 0,
+      "timeoutmax": 5
+    },
+    {
+      "id": 2,
+      "title": "2. ハンドソープをつける",
+      "desc": "適切な量を手に取る",
+      "img": "step02.png",
+      "items": [
+        "1.動作確認"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 0,
+      "timeoutmax": 5
+    },
+    {
+      "id": 3,
+      "title": "3. 手のひらをこする",
+      "desc": "しっかり泡立たせる",
+      "img": "step03.png",
+      "items": [
+        "1.動作確認",
+        "2.実施回数"
+      ],
+      "washcountmax": 10,
+      "washtimemax": 0,
+      "timeoutmax": 5
+    },
+    {
+      "id": 4,
+      "title": "4. 手のこうをこする",
+      "desc": "汚れを落とすように洗う",
+      "img": "step04.png",
+      "items": [
+        "1.動作確認",
+        "2.実施回数",
+        "3.実施時間"
+      ],
+      "washcountmax": 10,
+      "washtimemax": 5,
+      "timeoutmax": 5
+    },
+    {
+      "id": 5,
+      "title": "5. 指の間をこする",
+      "desc": "指を組み合わせて洗う",
+      "img": "step05.png",
+      "items": [
+        "1.動作確認",
+        "2.実施回数",
+        "3.実施時間"
+      ],
+      "washcountmax": 10,
+      "washtimemax": 5,
+      "timeoutmax": 5
+    },
+    {
+      "id": 6,
+      "title": "6. 親指・手首をこする",
+      "desc": "ねじり洗いで汚れを落とす",
+      "img": "step06.png",
+      "items": [
+        "1.動作確認",
+        "2.実施回数",
+        "3.実施時間"
+      ],
+      "washcountmax": 10,
+      "washtimemax": 5,
+      "timeoutmax": 5
+    },
+    {
+      "id": 7,
+      "title": "7. 爪の間をこする",
+      "desc": "ブラシで細部まで洗浄",
+      "img": "step07.png",
+      "items": [
+        "1.動作確認",
+        "2.実施時間"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 5,
+      "timeoutmax": 5
+    },
+    {
+      "id": 8,
+      "title": "8. 流水で泡を流す",
+      "desc": "残留物のないように",
+      "img": "step08.png",
+      "items": [
+        "1.動作確認",
+        "2.実施時間"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 20,
+      "timeoutmax": 5
+    },
+    {
+      "id": 9,
+      "title": "9. ペーパータオルでふく",
+      "desc": "清潔なタオルで乾燥",
+      "img": "step09.png",
+      "items": [
+        "1.動作確認"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 0,
+      "timeoutmax": 5
+    },
+    {
+      "id": 10,
+      "title": "10. スーパーMで殺菌・乾燥",
+      "desc": "高出力殺菌ライト",
+      "img": "step10.png",
+      "items": [
+        "1.動作確認",
+        "2.実施時間"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 20,
+      "timeoutmax": 5
+    },
+    {
+      "id": 11,
+      "title": "11. アルコールを噴きつける",
+      "desc": "手指全体に噴霧",
+      "img": "step11.png",
+      "items": [
+        "1.動作確認"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 0,
+      "timeoutmax": 5
+    },
+    {
+      "id": 12,
+      "title": "12. アルコールをもみ込む",
+      "desc": "乾燥するまで継続",
+      "img": "step12.png",
+      "items": [
+        "1.動作確認"
+      ],
+      "washcountmax": 0,
+      "washtimemax": 0,
+      "timeoutmax": 5
+    }
+  ],
+  "TriggerMode": 0
 }

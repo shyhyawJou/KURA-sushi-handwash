@@ -64,7 +64,9 @@ class App_HandWash:
             'Logout': {'left': self.tracker_left.logout_callback, 
                        'right': self.tracker_right.logout_callback},
             'NextStep': {'left': self.tracker_left.switch_step_callback, 
-                         'right': self.tracker_right.switch_step_callback}
+                         'right': self.tracker_right.switch_step_callback},
+            'Trigger': {'left': self.tracker_left.switch_login_mode_callback, 
+                        'right': self.tracker_right.switch_login_mode_callback},
         }
         self.mqtt_manager.add_callbacks(callbacks)
         
