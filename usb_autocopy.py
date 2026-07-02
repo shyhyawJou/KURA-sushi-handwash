@@ -234,18 +234,24 @@ def sync_files():
         all_success = True
         paths = list(mark_path.parent.glob(f'{mark_path.stem}.*'))
         
+        copied_files = []
         for path in paths:
             try:
                 logger.info(f"Copying {path} to USB...")
                 dst = f'{CURRENT_MOUNT}/{"/".join(path.parts[-2:])}'
                 os.makedirs(dirname(dst), exist_ok=True)
                 shutil.copy2(path, dst) # copy2 會保留元數據
+                copied_files.append([path, dst])
 
-                # 強制將快取寫入磁碟
-                with open(dst, 'rb') as f:
-                    os.fsync(f.fileno())       
+            except Exception as e:
+                logger.error(f"Error copying {path}: {e}")
 
-                # 驗證 MD5 確保檔案正確
+        # sync
+        os.sync()
+
+        # 驗證 MD5 確保檔案正確
+        for path, dst in copied_files:
+            try:
                 if get_md5(path) == get_md5(dst):
                     logger.success(f"Verification Success: {dst}")                    
                 else:
