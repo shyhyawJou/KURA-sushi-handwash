@@ -8,7 +8,7 @@ streamer:
     enable: true
     host: '127.0.0.1'
     port: 9527
-    route: /meal
+    route: /handwash
     size: [640, 480]
     quality: 40
 
@@ -204,6 +204,8 @@ logic:
         scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
         action_frame: 20
         init_step_num: 1
+
+    login: 'barcode'  # 'hand' or 'barcode'
 
 udp:
     ip: '127.0.0.1'

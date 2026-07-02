@@ -137,7 +137,6 @@ class Video:
         while self.running:
             try:
                 ts, frame = self.frame_q.get(timeout=1.)
-                #frame = cv2.resize(frame, (self.frame_w, self.frame_h))
                 frame = resize_keep_scale(frame, [self.frame_w, self.frame_h], 'corner')
             except queue.Empty:
                 sleep(0.5)

@@ -7,7 +7,7 @@ from loguru import logger
 
 
 class Csv_Manager:
-    def __init__(self, save_dir='wash_logs', output_path=None):
+    def __init__(self, save_dir, output_path=None):
         self.current_date = datetime.now().strftime('%Y%m%d')
         self.overwrite = output_path is not None
         self.save_dir = save_dir
@@ -29,15 +29,16 @@ class Csv_Manager:
 
     def _init_csv(self):
         self.headers = [
-            "Store ID", "Step Sequence", "Start Time", "End Time", 'Duration', "Step Count", 
-            "Is Detecting Step", "Action Confirmed Time", 'Finish reason', 'Region'
+            "Store ID", "User ID", "User Name", "Step Sequence", "Start Time", "End Time", 
+            'Duration', "Step Count", "Is Detecting Step", "Action Confirmed Time", 
+            'Finish reason', 'Region'
         ]
         for i in range(1, 13):
             self.headers.append(f'Step{i} min count')
             self.headers.append(f'Step{i} min time')
 
         if not os.path.exists(self.file_path) or self.overwrite:
-            with open(self.file_path, 'w', newline='', encoding='utf-8') as f:
+            with open(self.file_path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(self.headers)
             logger.info(f"Created new CSV file: {self.file_path}")

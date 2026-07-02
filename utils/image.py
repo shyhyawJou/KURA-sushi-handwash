@@ -8,6 +8,8 @@ def resize_keep_scale(img, size, mode='corner'):
     Args
         mode: "corner" | "center"
     """
+    if img.shape[:2] == size[::-1]:
+        return img
 
     h, w = img.shape[:2]
     target_w, target_h = size
