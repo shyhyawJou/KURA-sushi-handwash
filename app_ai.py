@@ -37,6 +37,7 @@ class App_HandWash:
 
         CFG['camera']['video_path'] = str(VIDEO_PATH)  # 要讀取的影片
         CFG['video']['result']['output_path'] = VIDEO_PATH  # 利用檔名產生輸出檔案
+        CFG['video']['predict']['output_path'] = VIDEO_PATH  # 利用檔名產生輸出檔案
         CFG['csv']['output_path'] = VIDEO_PATH.with_suffix('.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
@@ -44,6 +45,7 @@ class App_HandWash:
         self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.origin_video = Video(**CFG['video']['origin'])
         self.result_video = Video(**CFG['video']['result'])
+        self.predict_video = Video(**CFG['video']['predict'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.mqtt_manager = MQTT(**CFG['mqtt'])
 
@@ -215,7 +217,8 @@ class App_HandWash:
                     with video_timer:
                         self.origin_video.write_frame(frame)
                         self.result_video.write_frame(frame_copy)
-                        #self.draw_manager.put(frame_copy, now, scores, boxes, pred_labels)
+                        if len(boxes) > 0:
+                            self.predict_video.write_frame(frame)
 
                 # log time elapsed
                 MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'INFO', reset=False)
@@ -261,7 +264,7 @@ class App_HandWash:
         self.streamer.stop()
         self.origin_video.stop()
         self.result_video.stop()
-        #self.draw_manager.stop()
+        self.predict_video.stop()
         self.mqtt_manager.disconnect()
         logger.info(f'CSV path: {self.csv_manager.file_path}')
         logger.success("release all sources !")
