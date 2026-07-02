@@ -117,7 +117,7 @@ video:
 
     # 有 AI 檢測框的影片
     predict: 
-        enable: true  # 要不要啟動錄影 (不管其他參數)
+        enable: false  # 要不要啟動錄影 (不管其他參數)
         base_dir: log/record/predict
         frame_w: 640
         frame_h: 480
@@ -204,7 +204,9 @@ logic:
         action_frame: 20
         init_step_num: 1
 
-    login: 'hand'  # 'hand' or 'scanner'
+    login:
+        0: 'hand'
+        1: 'scanner'
 
 udp:
     ip: '127.0.0.1'
@@ -225,5 +227,6 @@ mqtt:
         - 'Login'
         - 'Logout'
         - 'NextStep'
+        - 'Trigger'
     qos: 0
     pub_freq: 100
