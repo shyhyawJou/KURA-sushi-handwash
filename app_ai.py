@@ -106,6 +106,11 @@ class App_HandWash:
         # loop
         while self.is_running:
             try:
+                is_login = self.tracker_left.is_login or self.tracker_right.is_login
+                if CFG['logic']['login'] == 'barcode' and not is_login:
+                    sleep(0.05)
+                    continue
+
                 with loop_timer:
                     # read frame
                     with read_frame_timer:
@@ -315,17 +320,17 @@ def get_sort_key(path_obj):
 
 
 if __name__ == "__main__":
-    FOLDER = 'downloads'
+    FOLDER = 'video'
 
     paths = sorted(p(FOLDER).glob('**/*.mp4'), key=get_sort_key)
     for path in paths:
         try:
-            #if path.name != '20260410_1.mp4':
-            #    continue
+            if path.name != '20260410_1_test.mp4':
+                continue
 
             VIDEO_PATH = path
-            if path.stem != 'test' and int(path.stem.split('_')[1]) not in {2, 3, 4, 8, 9, 10}:
-                continue
+            #if path.stem != 'test' and int(path.stem.split('_')[1]) not in {2, 3, 4, 8, 9, 10}:
+            #    continue
 
             device_code = socket.gethostname().split('-')[-1]
             app = App_HandWash(device_code)

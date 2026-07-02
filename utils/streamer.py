@@ -1,5 +1,6 @@
 import cv2
 import threading
+import asyncio
 import uvicorn
 import queue
 from fastapi import FastAPI
@@ -27,8 +28,10 @@ class Mjpeg_Streamer:
         self.quality = quality
         
         # 使用 Queue 來解耦主程序與處理程序
-        self.frame_queue = queue.Queue(maxsize=2)
+        self.frame_queue = queue.Queue(maxsize=1)
         self.processed_bytes = None  # 儲存處理完後的 JPEG bytes
+        self._frame_lock = threading.Lock()
+        self._frame_version = 0
         
         self.is_enable = enable
         self.is_running = False
@@ -62,8 +65,11 @@ class Mjpeg_Streamer:
                 
                 if ret:
                     # 封裝成標準的 MJPEG 影格格式
-                    self.processed_bytes = (b'--frame\r\n'
-                                            b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                    jpeg_bytes = (b'--frame\r\n'
+                                  b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                    with self._frame_lock:
+                        self.processed_bytes = jpeg_bytes
+                        self._frame_version += 1
                 
                 # 完成後標記任務
                 self.frame_queue.task_done()
@@ -72,19 +78,28 @@ class Mjpeg_Streamer:
             except Exception as e:
                 logger.error(f"Worker processing error: {e}")
 
-    def _generate(self):
-        """發送執行緒：負責控制 FPS 並發送處理好的內容"""
+    async def _generate(self):
+        """ 發送執行緒：只在有『新』畫面時才送出，避免對慢速連線（如 ssh -L）
+        重複灌入同一張舊畫面，塞爆 tunnel 造成延遲累積 """
         logger.info("Stream generator started.")
+        last_sent_version = -1
         try:
             while self.is_running:
-                if self.processed_bytes is None:
-                    sleep(0.01) # 稍微增加間隔減少 CPU 負擔
+                with self._frame_lock:
+                    current_version = self._frame_version
+                    data = self.processed_bytes
+
+                # 還沒有畫面，或畫面沒有更新 -> 不送，稍微等一下再檢查
+                if data is None or current_version == last_sent_version:
+                    await asyncio.sleep(0.01)
                     continue
-                
-                yield self.processed_bytes
-                
-                #
-                sleep(0.005)
+
+                last_sent_version = current_version
+                yield data
+
+                # 讓 event loop 有機會處理其他任務，
+                # 同時避免同一輪迴圈把 CPU 吃滿
+                await asyncio.sleep(0)
         except Exception as e:
             logger.debug(f"Streaming connection closed: {e}")
         finally:

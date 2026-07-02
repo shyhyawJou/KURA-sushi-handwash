@@ -10,6 +10,7 @@ SYS_CFG = None
 
 with open('utils/config.yaml') as f:
     CFG = yaml.safe_load(f)
+    assert CFG['logic']['login'] in {'barcode', 'hand'}
 
 
 with open(CFG['logic']['system_parameter']) as f:
