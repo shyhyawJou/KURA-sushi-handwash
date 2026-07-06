@@ -254,5 +254,6 @@ mqtt:
         - 'Login'
         - 'Logout'
         - 'NextStep'
+        - 'Trigger'
     qos: 0
     pub_freq: 10

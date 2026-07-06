@@ -288,6 +288,7 @@ class HandWashTracker:
             "Store ID": "test", 
             "User ID": '' if self.login_mode == 'hand' else str(self.user_id),
             "User Name": '' if self.login_mode == 'hand' else str(self.user_name),
+            "Login Mode": self.login_mode,
             "Step Sequence": self.steps.ids.copy(),
             "Start Time": [get_now_str(t) for t in self.steps.start_times], 
             "Action Confirmed Time": [get_now_str(t) for t in self.steps.step_confirmed_times], 
