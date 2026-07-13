@@ -20,10 +20,8 @@ class HandWashTracker:
 
         # 重要變數
         self.zone_name = zone_name
-        self.ai_classes = ai_class
-        self.logic_classes = logic_cfg['class']
-        self.label_bare_hand = [ai_class.index(n) for n in self.logic_classes['hand']]
-        self.label_gloved_hand = [ai_class.index(n) for n in self.logic_classes['gloved hand']]
+        self.label_bare_hand = [ai_class.index(n) for n in logic_cfg['class']['hand']]
+        self.label_gloved_hand = [ai_class.index(n) for n in logic_cfg['class']['gloved hand']]
         self.label_scrub_hand = [ai_class.index(self.cfg['step_name'][i]) 
                                  for i, cfg in enumerate(self.sys_cfg, 1) 
                                  if cfg['washcountmax'] > 0]
@@ -33,7 +31,6 @@ class HandWashTracker:
         assert self.srcub_steps == self.cfg['scrub_count_ratio'].keys()
         self.scrub_count_ratio = {i: (self.cfg['scrub_count_ratio'][i] if i in self.srcub_steps else -1) 
                                   for i in range(1, 13)}
-        self.is_no_hand = False
 
         # mqtt
         self.mqtt = mqtt
@@ -440,15 +437,6 @@ class HandWashTracker:
             self._update_record(step_id)
 
         export_data = self._finalize_session()
-
-        # check
-        if export_data:
-            detecting_steps = set()
-            data = zip(export_data['Step Sequence'], export_data['Is Detecting Step'])
-            for step_id, is_detecting_step in data:
-                if is_detecting_step:
-                    detecting_steps.add(step_id)
-
         logger.warning(f'[{self.zone_name}] Session stop because of "{self.finish_reason}" !')
 
         self.reset()
