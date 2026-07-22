@@ -8,7 +8,7 @@ streamer:
     enable: true
     host: '127.0.0.1'
     port: 9527
-    route: /handwash
+    route: /ai_stream
     size: [640, 480]
     quality: 40
 
@@ -81,7 +81,7 @@ csv:
 video:
     # 原始影片
     origin: 
-        enable: true  # 要不要啟動錄影 (不管其他參數)
+        enable: false  # 要不要啟動錄影 (不管其他參數)
         base_dir: /mnt/reserved/record/stream
         frame_w: 640
         frame_h: 480
