@@ -10,7 +10,7 @@ streamer:
     enable: true
     host: '127.0.0.1'
     port: 9527
-    route: /handwash
+    route: /ai_stream
     size: [640, 480]
     quality: 40
 
