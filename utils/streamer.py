@@ -35,7 +35,6 @@ class Mjpeg_Streamer:
         
         self.is_enable = enable
         self.is_running = False
-        self.is_first_frame = True
         
         if not self.is_enable: 
             logger.info(f'Streamer is disabled.')
@@ -62,10 +61,6 @@ class Mjpeg_Streamer:
                 
                 # 在背景執行緒處理耗時的 resize 與編碼
                 processed_frame = resize_keep_scale(frame, self.stream_size, 'corner')
-                if self.is_first_frame:
-                    logger.info(f'stream size: {processed_frame.shape[:2][::-1]}')
-                    self.is_first_frame = False
-                
                 ret, buffer = cv2.imencode('.jpg', processed_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
                 
                 if ret:
@@ -134,7 +129,8 @@ class Mjpeg_Streamer:
 
         self.server_thread = threading.Thread(target=run_server, daemon=True)
         self.server_thread.start()
-        logger.success(f"[*] MJPEG Streamer started at http://{self.host}:{self.port}{self.route}")
+        logger.success(f"[*] MJPEG Streamer started at http://{self.host}:{self.port}{self.route}, "
+                       f"stream wh: {self.stream_size}")
 
     def stop(self):
         """釋放資源"""
