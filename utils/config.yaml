@@ -24,10 +24,11 @@ AI:
         #path: 'best_0.9220_0.9700_epoch_11_kura_spray_alcohol_v14.onnx'
         #path: 'best_0.9370_0.9760_epoch_2_kura_spray_alcohol_v15.onnx'
         #path: 'best_0.8960_0.9540_epoch_16_kura_spray_alcohol_v17.onnx'
-        path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17.onnx'
+        #path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17.onnx'
         #path: 'best_0.7550_0.8530_epoch_1_tmp7.onnx'
         #path: 'best_0.7660_0.8670_epoch_2_tmp7.onnx'
         #path: 'best_0.8690_0.7510_epoch_9_tmp7.onnx'
+        path: 'best_0.9460_0.8540_epoch_23_kura_spray_alcohol_v19.onnx'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
