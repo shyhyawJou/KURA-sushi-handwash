@@ -211,7 +211,7 @@ class HandWashTracker:
             self.is_detecting_steps[step_id] = step_id == self.detecting_step
 
         # 滿足動作確認條件
-        if self.frames[step_id] == self.cfg['action_frame']:
+        if self.frames[step_id] == self.cfg['action_frame'][step_id]:
             self.step_confirmed[step_id] = True
             self.step_confirmed_times[step_id] = self.now
             logger.debug(f'[{self.zone_name}] Step {step_id}: action confirmed !')
@@ -232,7 +232,7 @@ class HandWashTracker:
 
         # idle 處理
         self.idle_frames[step_id] += 1
-        if self.idle_frames[step_id] == self.cfg['action_frame'] // 4:
+        if self.idle_frames[step_id] == self.cfg['action_frame'][step_id] // 4:
             # 儲存
             if self.step_confirmed[step_id]:
                 self._update_record(step_id)
@@ -241,7 +241,7 @@ class HandWashTracker:
                 if step_id == 2:
                     self.has_soaped = True
                     logger.info(f'[{self.zone_name}] Soaped !')
-                elif step_id == 8:
+                elif step_id == self.detecting_step == 8:
                     self.has_soaped = False
                     logger.info(f'[{self.zone_name}] Rinsed !')
 
@@ -251,7 +251,7 @@ class HandWashTracker:
     def _do_scrub_count(self, step_id):
         if step_id not in self.srcub_steps:
             return
-        frame = max(self.frames[step_id] - self.cfg['action_frame'], 0)
+        frame = max(self.frames[step_id] - self.cfg['action_frame'][step_id], 0)
         self.counts[step_id] = frame // self.scrub_count_ratio[step_id]
 
     def _compute_step_duration(self, step_id):

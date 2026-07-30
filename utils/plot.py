@@ -243,7 +243,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
                 suffix = ""
 
             # 重要資訊
-            min_frame = cfg['action_frame']
+            min_frame = cfg['action_frame'][i]
             min_duration = sys_cfg[i-1]['washtimemax']
             min_count = sys_cfg[i-1]['washcountmax']
 

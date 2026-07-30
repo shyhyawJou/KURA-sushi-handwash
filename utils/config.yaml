@@ -21,7 +21,8 @@ AI:
         #path: 'best_0.9220_0.9700_epoch_11_kura_spray_alcohol_v14_fp16.dla'
         #path: 'best_0.9370_0.9760_epoch_2_kura_spray_alcohol_v15_fp16.dla'
         #path: 'best_0.8960_0.9540_epoch_16_kura_spray_alcohol_v17_fp16.dla'
-        path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17_fp16.dla'
+        #path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17_fp16.dla'
+        path: 'best_0.9460_0.8540_epoch_23_kura_spray_alcohol_v19_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
@@ -228,7 +229,19 @@ logic:
             6: 20
             
         scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
-        action_frame: 20
+        action_frame:
+            1: 20
+            2: 10
+            3: 20
+            4: 20
+            5: 20
+            6: 20
+            7: 20
+            8: 20
+            9: 20
+            10: 20
+            11: 20
+            12: -1
         init_step_num: 1
 
     login:
