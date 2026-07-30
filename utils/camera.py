@@ -60,7 +60,7 @@ class Camera:
     def _open(self):
         self.capture = cv2.VideoCapture(self.video_path)
         if not self.capture.isOpened():
-            raise ValueError(f"Failed to open camera: {self.video_path}")
+            raise ValueError(f"Failed to open video: {self.video_path}")
         logger.info(f"Video initialized: {self.video_path} at {self.width}x{self.height}")
 
     def _raw_read(self):
