@@ -24,3 +24,10 @@ def get_now_str(now, utc=True):
         now = datetime.fromtimestamp(now)
         now = now.strftime("%Y%m%d %H%M%S.%f")[:-3]
     return now
+
+
+def get_utc_offset_str():
+    """ 單位: 小時 """
+    offset = datetime.now().astimezone().utcoffset()
+    hour = int(offset.total_seconds() / 3600)
+    return hour
