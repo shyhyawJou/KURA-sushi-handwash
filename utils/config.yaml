@@ -166,7 +166,6 @@ logic:
     # 秒數相關
     time_parameter:
         time_scale: 0.1666            # 因為 server 跑速快很多
-        trigger_pause: 1.0            # trigger 後多久切到下一步驟
         pub_hand_delay: 0.5        # 連續幾秒手狀態切換後才開始通知系統
 
     # 前端和我共用的參數
