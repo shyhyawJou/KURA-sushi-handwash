@@ -59,7 +59,6 @@ class App_HandWash:
         self.is_left_login = False
         self.is_right_login = False
         self.is_ai_login = True
-        self.is_alarm = False
 
         # 重要標籤
         self.wash_labels = [self.tracker_left.step_labels[i] for i in range(1, 12)]
@@ -104,7 +103,6 @@ class App_HandWash:
             frame_copy_timer = Timer('frame copy', silent=True)
             streamer_timer = Timer('push frame to streamer', silent=True)
             video_timer = Timer('write frame to video', silent=True)
-            alarm_timer = Timer('find hands and alarm', silent=True)
 
             logger.info("Main loop started.")
         except:
@@ -162,44 +160,25 @@ class App_HandWash:
                     with frame_copy_timer:
                         frame_copy = frame.copy()
 
-                    # 6 支以上的手出現, 發出警告
-                    with alarm_timer:
-                        hand_lbs = self.tracker_left.label_bare_hand + self.tracker_left.label_gloved_hand
-                        mask = np.isin(pred_labels, hand_lbs)
-                        hands = boxes[mask].copy()
-                        hands[:, 2:4] -= hands[:, 0:2]
-                        hand_scores = scores[mask]
-                        ids = cv2.dnn.NMSBoxes(hands, hand_scores, 0., 0.7)
-                        hand_classes = [self.ai_model.classes[i] for i in pred_labels[mask][ids]]
-                        if len(ids) >= 6 and not self.is_alarm:
-                            logger.warning(f'found {len(ids)} hands, detail: {hand_classes} !')
-                            self.tracker_left._publish_status(self.mqtt_manager.pub_topics['system'], 'Alarm')
-                            self.is_alarm = True
-                        elif len(ids) < 6 and self.is_alarm:
-                            self.tracker_left._publish_status(self.mqtt_manager.pub_topics['system'], 'AlarmCancel')
-                            self.is_alarm = False
-
                     # 洗手檢測
                     now = time()
 
                     with handwash_timer:
-                        if not self.is_alarm:
-                            res_l = self.tracker_left.update(
-                                left_dets, 
-                                frame_copy,
-                                now
-                            )
-                            if res_l: 
-                                self.csv_manager.write_record(res_l)
+                        res_l = self.tracker_left.update(
+                            left_dets, 
+                            frame_copy,
+                            now
+                        )
+                        if res_l: 
+                            self.csv_manager.write_record(res_l)
                         
-                        if not self.is_alarm:
-                            res_r = self.tracker_right.update(
-                                right_dets, 
-                                frame_copy,
-                                now
-                            )
-                            if res_r:
-                                self.csv_manager.write_record(res_r)
+                        res_r = self.tracker_right.update(
+                            right_dets, 
+                            frame_copy,
+                            now
+                        )
+                        if res_r:
+                            self.csv_manager.write_record(res_r)
 
                     # visualization
                     with draw_result_timer:
@@ -233,7 +212,6 @@ class App_HandWash:
                 MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'INFO', reset=False)
                 MY_LOGGER.log(f'[{read_frame_timer.name}] {read_frame_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{split_timer.name}] {split_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
-                MY_LOGGER.log(f'[{alarm_timer.name}] {alarm_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{ai_timer.name}] {ai_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{handwash_timer.name}] {handwash_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
                 MY_LOGGER.log(f'[{draw_result_timer.name}] {draw_result_timer.elapsed:.6f} (s)', 'DEBUG', reset=False)
@@ -338,6 +316,8 @@ if __name__ == "__main__":
     for folder in sorted(p(FOLDER).glob('*')):
         if not folder.is_dir():
             continue
+        #if folder.name != '20260410':
+        #    continue
 
         # flag
         exit_program = False

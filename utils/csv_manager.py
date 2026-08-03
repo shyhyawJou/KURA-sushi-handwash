@@ -29,9 +29,9 @@ class Csv_Manager:
 
     def _init_csv(self):
         self.headers = [
-            "Store ID", "User ID", "User Name", "Login Mode", "Step Sequence", "Start Time", 
-            "End Time", 'Duration', "Step Count", "Is Detecting Step", "Action Confirmed Time", 
-            'Finish reason', 'Region'
+            "Store ID", "User ID", "User Name", "UTC Offset", "Login Mode", "Step Sequence", 
+            "Start Time", "Action Confirmed Time", "End Time", "Step Count", "Is Detecting Step", 
+            'Duration', "Frame", 'Step Length', 'Finish reason', 'Region'
         ]
         for i in range(1, 13):
             self.headers.append(f'Step{i} min count')

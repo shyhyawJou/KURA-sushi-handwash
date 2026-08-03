@@ -187,7 +187,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
     # --- 參數配置 ---
     font_size = 0.31     # 緊湊字體
     line_height = 12     # 緊湊行高
-    panel_height = 175   # 面板總高度 (從底部往上算)
+    panel_height = 190   # 面板總高度 (從底部往上算)
     text_start_x_offset = 20
     
     def draw_text_with_shadow(image, text, org, color=(255, 255, 255), size=0.31, thickness=1):
@@ -213,7 +213,13 @@ def draw_debug_panel(img, tracker_l, tracker_r):
             #cv2.putText(img, text, (start_x, pos_y), font, font_size, (0, 0, 0), 1, cv2.LINE_AA)
             draw_text_with_shadow(img, text, (start_x, pos_y), (0, 255, 0), 0.35, 1)
 
-        # 狀態標頭
+        # 登入狀態
+        status_color = (0, 255, 0) if d['is_login'] else (0, 0, 255)
+        text = 'Login' if d['is_login'] else 'Logout'
+        draw_text_with_shadow(img, f"[{tracker.zone_name}] {text}", 
+                              (start_x, h - panel_height), status_color, font_size)
+
+        # 手狀態
         status_color = (0, 255, 255) if d['status'] == "Hand Detected" else (150, 150, 150)
         draw_text_with_shadow(img, f"[{tracker.zone_name}] {d['status']}", 
                               (start_x, h - panel_height + 15), status_color, font_size)

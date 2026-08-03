@@ -95,6 +95,7 @@ class Camera:
         if self.capture:
             self.capture.release()
             logger.success(f"Video {self.video_path} and camera thread are released.")
+            self.capture = None
 
     def _cal_crop_region(self, img_h, img_w):
         crop_area = self.crop_area * [img_w, img_h, img_w, img_h]

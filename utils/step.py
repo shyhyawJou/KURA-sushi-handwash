@@ -66,6 +66,30 @@ class Step_History:
                                                 step_confirmed_time, end_time, duration,
                                                 is_detecting_step)
 
+    def insert(self, step: Step, idx):
+        self.ids.insert(idx, step.id)
+        self.counts.insert(idx, step.count)
+        self.start_times.insert(idx, step.start_time)
+        self.end_times.insert(idx, step.end_time)
+        self.step_confirmed_times.insert(idx, step.step_confirmed_time)
+        self.durations.insert(idx, step.duration)
+        self.frames.insert(idx, step.frame)
+        self.is_detecting_steps.insert(idx, step.is_detecting_step)
+        if step.is_detecting_step:
+            self.detected_steps[step.id] = step
+
+    def pop(self):
+        last_id = self.ids.pop()
+        self.counts.pop()
+        self.start_times.pop()
+        self.end_times.pop()
+        self.step_confirmed_times.pop()
+        self.durations.pop()
+        self.frames.pop()
+        self.is_detecting_steps.pop()
+        if last_id in self.detected_steps:
+            self.detected_steps.pop(last_id)
+
     def __len__(self):
         return len(self.ids)
     
