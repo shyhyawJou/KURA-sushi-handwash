@@ -26,6 +26,21 @@ done
 crontab cron_file
 systemctl restart crond
 
-rm -f ~/${DATA_DIR}.zip
+#rm -f ~/${DATA_DIR}.zip
 
 ps aux | grep python
+
+sleep 2
+
+# 檢查 log
+printf "\n********************************* kura 主程式 log *********************************\n"
+tail -n 20 /mnt/reserved/log/$(date +%Y%m%d)-*.log
+
+printf "\n********************************* kura 主程式 ERROR *********************************\n"
+grep ERROR -aE /mnt/reserved/log/$(date +%Y%m%d)-*.log || true
+
+printf "\n********************************* disk_monitor log *********************************\n"
+tail -n 20 /mnt/reserved/disk_monitor.log
+
+printf "\n********************************* usb_autocopy log *********************************\n"
+tail -n 20 /mnt/reserved/usb_autocopy.log
