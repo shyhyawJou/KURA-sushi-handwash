@@ -5,13 +5,12 @@ SERVICES=(kurashushi_handwash.service disk_monitor.service usb_autocopy.service)
 
 unzip -o ~/${DATA_DIR}.zip -d /mnt/reserved
 
-#pip3 install \
-#    shapely \
-#    pyclipper \
-#    rapidfuzz \
-#    uvicorn \
-#    fastapi \
-#    loguru
+pip3 install \
+    opencv-python \
+    numpy \
+    uvicorn \
+    fastapi \
+    loguru
 
 cd /mnt/reserved/${DATA_DIR}
 
