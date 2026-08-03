@@ -154,7 +154,7 @@ class HandWashTracker:
                 self.is_login = False
                 self.is_final = True
                 self.finish_reason = 'No hand'
-        # 觸發登入
+        # 觸發 AI 自動登入
         elif not self.is_login and self.login_mode == 'hand':
             if len(hands) > 0:
                 if self.now - self._get_has_hand_start_time() >= pub_hand_delay:
@@ -515,6 +515,10 @@ class HandWashTracker:
         self.is_login = True
         self.user_name = cmd['user']
         self.user_id = cmd['id']
+        self.has_hand_start_time = None
+        self.no_hand_start_time = None
+        self.pub_no_hand = False
+        self.pub_no_hand_zero = False
         logger.info(f'[{self.zone_name}] UI became login, '
                     f'[User ID]: {self.user_id}, '
                     f'[User Name]: {self.user_name} !')
