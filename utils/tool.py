@@ -31,3 +31,17 @@ def get_utc_offset_str():
     offset = datetime.now().astimezone().utcoffset()
     hour = int(offset.total_seconds() / 3600)
     return hour
+
+
+def get_boxes_outside(boxes: np.ndarray, roi: tuple) -> np.ndarray:
+    boxes = np.asarray(boxes)
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+
+    # 計算中心點
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+    rx1, ry1, rx2, ry2 = roi
+
+    # 判斷中心點是否在 ROI 內 (包含邊界)
+    inside_roi = (cx >= rx1) & (cx <= rx2) & (cy >= ry1) & (cy <= ry2)
+    return boxes[~inside_roi]

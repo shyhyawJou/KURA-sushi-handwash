@@ -1,7 +1,7 @@
 set -euo pipefail
 
 DATA_DIR='kurasushi_handwash'
-SERVICES=(kurashushi_handwash.service disk_monitor.service usb_autocopy.service)
+SERVICES=(kurasushi_handwash.service disk_monitor.service usb_autocopy.service)
 
 unzip -o ~/${DATA_DIR}.zip -d /mnt/reserved
 
