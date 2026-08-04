@@ -1,6 +1,6 @@
 from .streamer import Mjpeg_Streamer
 from .plot import plot_bbox, draw_timestamp, draw_debug_panel
-from .detector import RTMDet_DLA
+from .detector import RTMDet_ONNX
 from .camera import Camera
 from .video import Video
 from .logger import setup_logger, MY_LOGGER

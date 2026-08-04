@@ -52,6 +52,7 @@ class App_HandWash:
         self.mqtt_manager = MQTT(**CFG['mqtt'])
 
         # 檢測洗手
+        self.screen = np.asarray(CFG['roi']['screen'])
         self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, 
                                             self.mqtt_manager, CFG['mqtt']['pub_freq'])
         self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, 
@@ -137,10 +138,9 @@ class App_HandWash:
                     with ai_timer:
                         scores, boxes, pred_labels = self.ai_model(frame)
 
-                    # 螢幕位置
+                    # 螢幕內的框進行忽略
                     h, w = frame.shape[:2]
-                    screen = np.array([0.33240997, 0.08704062, 0.70637119, 0.2901354])
-                    screen = np.int32(screen * [w, h, w, h])
+                    screen = self.screen * [w, h, w, h]
                     is_outside = get_boxes_outside(boxes, screen)
                     scores = scores[is_outside]
                     boxes = boxes[is_outside]
@@ -191,6 +191,8 @@ class App_HandWash:
 
                     # visualization
                     with draw_result_timer:
+                        # 畫螢幕
+                        screen = screen.astype(int)
                         cv2.rectangle(frame_copy, screen[:2], screen[2:4], (0, 255, 0), 3)
 
                         # 畫 detections
@@ -322,13 +324,15 @@ def get_sort_key(path_obj):
 
 if __name__ == "__main__":
     FOLDER = 'video'
-    FOLDER = 'videos_for_report'
+    #FOLDER = 'videos_for_report'
 
     for folder in sorted(p(FOLDER).glob('*')):
         if not folder.is_dir():
             continue
         #if folder.name != '20260410':
         #    continue
+        if folder.name != '20260804_live':
+            continue
 
         # flag
         exit_program = False
