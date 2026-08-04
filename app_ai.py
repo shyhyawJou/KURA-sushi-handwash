@@ -45,6 +45,7 @@ class App_HandWash:
         self.mqtt_manager = MQTT(**CFG['mqtt'])
 
         # 檢測洗手
+        self.screen = np.asarray(CFG['roi']['screen'])
         self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, 
                                             self.mqtt_manager, CFG['mqtt']['pub_freq'])
         self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, 
@@ -115,10 +116,9 @@ class App_HandWash:
                     with ai_timer:
                         scores, boxes, pred_labels = self.ai_model(frame)
 
-                    # 螢幕位置
+                    # 螢幕內的框進行忽略
                     h, w = frame.shape[:2]
-                    screen = np.array([0.33240997, 0.05704062, 0.70637119, 0.2601354])
-                    screen = np.int32(screen * [w, h, w, h])
+                    screen = self.screen * [w, h, w, h]
                     is_outside = get_boxes_outside(boxes, screen)
                     scores = scores[is_outside]
                     boxes = boxes[is_outside]
@@ -169,6 +169,8 @@ class App_HandWash:
 
                     # visualization
                     with draw_result_timer:
+                        # 畫螢幕
+                        screen = screen.astype(int)
                         cv2.rectangle(frame_copy, screen[:2], screen[2:4], (0, 255, 0), 3)
 
                         # 畫 detections
