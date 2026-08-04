@@ -117,9 +117,12 @@ class App_HandWash:
 
                     # 螢幕位置
                     h, w = frame.shape[:2]
-                    screen = np.array([0.33240997, 0.08704062, 0.70637119, 0.2901354])
+                    screen = np.array([0.33240997, 0.05704062, 0.70637119, 0.2601354])
                     screen = np.int32(screen * [w, h, w, h])
-                    boxes = get_boxes_outside(boxes, screen)
+                    is_outside = get_boxes_outside(boxes, screen)
+                    scores = scores[is_outside]
+                    boxes = boxes[is_outside]
+                    pred_labels = pred_labels[is_outside]
 
                     # 把 detections 分至左右區
                     with split_timer:
