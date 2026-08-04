@@ -1,0 +1,8 @@
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+WorkingDirectory=/mnt/reserved/kurasushi_handwash
+ExecStart=python3 app_ai.py
+Restart=always
+RestartSec=1

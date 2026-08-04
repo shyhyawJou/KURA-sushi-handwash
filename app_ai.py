@@ -23,7 +23,7 @@ from utils import (Mjpeg_Streamer,
                    draw_timestamp, draw_debug_panel, plot_bbox,
                    Timer,
                    MQTT,
-                   get_now_str,
+                   get_now_str, get_boxes_outside,
                    CFG, SYS_CFG)
 
 
@@ -137,6 +137,12 @@ class App_HandWash:
                     with ai_timer:
                         scores, boxes, pred_labels = self.ai_model(frame)
 
+                    # 螢幕位置
+                    h, w = frame.shape[:2]
+                    screen = np.array([0.33240997, 0.08704062, 0.70637119, 0.2901354])
+                    screen = np.int32(screen * [w, h, w, h])
+                    boxes = get_boxes_outside(boxes, screen)
+
                     # 把 detections 分至左右區
                     with split_timer:
                         h, w = frame.shape[:2]
@@ -171,7 +177,7 @@ class App_HandWash:
                         )
                         if res_l: 
                             self.csv_manager.write_record(res_l)
-                        
+
                         res_r = self.tracker_right.update(
                             right_dets, 
                             frame_copy,
@@ -182,6 +188,8 @@ class App_HandWash:
 
                     # visualization
                     with draw_result_timer:
+                        cv2.rectangle(frame_copy, screen[:2], screen[2:4], (0, 255, 0), 3)
+
                         # 畫 detections
                         plot_bbox(frame_copy, 
                                   boxes,
