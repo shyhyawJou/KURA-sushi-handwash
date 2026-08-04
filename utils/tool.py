@@ -44,4 +44,4 @@ def get_boxes_outside(boxes: np.ndarray, roi: tuple) -> np.ndarray:
 
     # 判斷中心點是否在 ROI 內 (包含邊界)
     inside_roi = (cx >= rx1) & (cx <= rx2) & (cy >= ry1) & (cy <= ry2)
-    return boxes[~inside_roi]
+    return ~inside_roi
