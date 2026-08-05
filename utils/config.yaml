@@ -23,7 +23,8 @@ AI:
         #path: 'best_0.8960_0.9540_epoch_16_kura_spray_alcohol_v17_fp16.dla'
         #path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17_fp16.dla'
         #path: 'best_0.9460_0.8540_epoch_23_kura_spray_alcohol_v19_fp1.dla'
-        path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20_fp16.dla'
+        #path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20_fp16.dla'
+        path: 'best_0.8360_0.7120_epoch_30_tmp13_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
