@@ -29,7 +29,8 @@ AI:
         #path: 'best_0.7660_0.8670_epoch_2_tmp7.onnx'
         #path: 'best_0.8690_0.7510_epoch_9_tmp7.onnx'
         #path: 'best_0.9460_0.8540_epoch_23_kura_spray_alcohol_v19.onnx'
-        path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20.onnx'
+        #path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20.onnx'
+        path: 'best_0.8560_0.7360_epoch_27_tmp12.onnx'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]
@@ -49,22 +50,21 @@ AI:
             - 'handwash'
             - 'UV sterilization'
         
-        agnostic_nms:  # null 是 disable
-            -
-                class:
-                    - 'handwash'
-                    - 'trigger soap dispenser'
-                    - 'palm to palm'
-                    - 'palm over back'
-                    - 'interlaced fingers'
-                    - 'thumb or wrist scrub'
-                    - 'scrub under nails'
-                    - 'handwash'
-                    - 'wipe hands with tissue'
-                    - 'UV sterilization'
-                    - 'spray alcohol'
-                iou_thresh:
-                    0.1
+        agnostic_nms: null  # null 是 disable
+            #-
+            #    class:
+            #        - 'handwash'
+            #        - 'trigger soap dispenser'
+            #        - 'palm to palm'
+            #        - 'palm over back'
+            #        - 'interlaced fingers'
+            #        - 'thumb or wrist scrub'
+            #        - 'scrub under nails'
+            #        - 'handwash'
+            #        - 'wipe hands with tissue'
+            #        - 'UV sterilization'
+            #        - 'spray alcohol'
+            #    iou_thresh: 0.1
             #- 
             #    class:
             #        - 'left'
@@ -199,24 +199,38 @@ logic:
             3: 7
             4: 7
             5: 7
-            6: 20
+            6: 7
             
         scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
         action_frame:
-            1: 20
+            1: 10
             2: 10
-            3: 20
-            4: 20
-            5: 20
-            6: 20
-            7: 20
-            8: 20
-            9: 20
-            10: 20
+            3: 10
+            4: 10
+            5: 10
+            6: 10
+            7: 10
+            8: 10
+            9: 10
+            10: 10
             11: 10
             12: 10
         init_step_num: 1
         alarm_frame: 10  # 連續滿足才 alarm
+
+        # 補救模型, value 是視為相同的意思, 例如 5: [3, 5] 表示步驟3,5 都可觸發步驟5
+        step_group:
+            1: [1]
+            2: [2]
+            3: [3]
+            4: [4]
+            5: [3, 5]
+            6: [4, 6, 7]
+            7: [7]
+            8: [8]
+            9: [9]
+            10: [10]
+            11: [11]
 
     login:
         0: 'hand'
@@ -246,4 +260,4 @@ mqtt:
     pub_freq: 100
 
 roi:
-    screen: [0.33240997, 0.08704062, 0.70637119, 0.2901354]
+    screen: [0.33240997, 0.08704062, 0.66637119, 0.2501354]

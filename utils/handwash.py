@@ -32,6 +32,8 @@ class HandWashTracker:
         self.step_labels = {i: ai_class.index(name) for i, name in self.cfg['step_name'].items() 
                             if name in ai_class}
         self.srcub_steps = {i for i, cfg in enumerate(self.sys_cfg, 1) if cfg['washcountmax'] > 0}
+        self.step_group = {step: [self.step_labels[i] for i in group] 
+                           for step, group in self.cfg['step_group'].items()}
         assert self.srcub_steps == self.cfg['scrub_count_ratio'].keys()
         self.scrub_count_ratio = {i: (self.cfg['scrub_count_ratio'][i] if i in self.srcub_steps else -1) 
                                   for i in range(1, 13)}
@@ -194,7 +196,12 @@ class HandWashTracker:
             if i == (1 if self.has_soaped else 8):
                 continue
 
-            mask = step_labels == self.step_labels[i]
+            # 如果是檢測中的步驟, 觸發條件較寬鬆
+            if i == self.detecting_step:
+                mask = np.isin(step_labels, self.step_group[i])  # 有些步驟視為相同
+            else:
+                mask = step_labels == self.step_labels[i]
+
             if len(hands) > 0 and np.any(mask):
                 self._do_step(i)
                 self._do_scrub_count(i)
@@ -238,11 +245,6 @@ class HandWashTracker:
         # 計算做了多久
         self._compute_step_duration(step_id)  
 
-        # 步驟 12 一滿足就儲存資訊, 以免影響後續洗手
-        if step_id == 12 and self.step_confirmed[step_id]:
-            self._update_record(step_id)
-            self.reset_step_info(step_id)
-
     def _undo_step(self, step_id):        
         # 必要處理
         self.last_start_times[step_id] = None
@@ -256,7 +258,7 @@ class HandWashTracker:
 
         # idle 處理
         self.idle_frames[step_id] += 1
-        if self.idle_frames[step_id] == self.cfg['action_frame'][step_id] // 4:
+        if self.idle_frames[step_id] == self.cfg['action_frame'][step_id] // 2:
             # 儲存
             if self.step_confirmed[step_id]:
                 self._update_record(step_id)
@@ -470,8 +472,8 @@ class HandWashTracker:
                 continue
             pending.append(step_id)
 
-        # 依 start time 排序後寫入
-        pending.sort(key=lambda sid: self.start_times[sid])
+        # 依 end time 排序後寫入
+        pending.sort(key=lambda sid: self.end_times[sid])
         for step_id in pending:
             self._update_record(step_id)
 
