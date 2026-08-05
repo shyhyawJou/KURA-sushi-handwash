@@ -195,7 +195,7 @@ logic:
         pub_hand_delay: 0.5        # 連續幾秒手狀態切換後才開始通知系統
 
     # 前端和我共用的參數
-    system_parameter: '/mnt/reserved/Flet/assets/Json/wash_steps.json'
+    system_parameter: '/mnt/reserved/QT/assets/Json/wash_steps.json'
 
     # 類別
     class:
