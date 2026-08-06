@@ -16,22 +16,9 @@ streamer:
 
 AI:
     handwash:
-        #path: 'best_0.8380_0.9060_epoch_91_kura_v16.onnx'
-        #path: 'best_0.8510_0.9030_epoch_56_kura_spray_alcohol_v2.onnx'
-        #path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7.onnx'
-        #path: 'best_0.9200_0.9680_epoch_8_kura_spray_alcohol_v11.onnx'
-        #path: 'best_0.9160_0.9700_epoch_5_kura_spray_alcohol_v13.onnx'
-        #path: 'best_0.9220_0.9700_epoch_11_kura_spray_alcohol_v14.onnx'
-        #path: 'best_0.9370_0.9760_epoch_2_kura_spray_alcohol_v15.onnx'
-        #path: 'best_0.8960_0.9540_epoch_16_kura_spray_alcohol_v17.onnx'
-        #path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17.onnx'
-        #path: 'best_0.7550_0.8530_epoch_1_tmp7.onnx'
-        #path: 'best_0.7660_0.8670_epoch_2_tmp7.onnx'
-        #path: 'best_0.8690_0.7510_epoch_9_tmp7.onnx'
-        #path: 'best_0.9460_0.8540_epoch_23_kura_spray_alcohol_v19.onnx'
-        #path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20.onnx'
+        path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20_fp16.dla'
         #path: 'best_0.8560_0.7360_epoch_27_tmp12.onnx'
-        path: 'best_0.8360_0.7120_epoch_30_tmp13.onnx'
+        #path: 'best_0.8360_0.7120_epoch_30_tmp13_fp16.dla'
         score_thresh: 0.5
         iou_thresh: 0.1
         input_wh: [448, 448]

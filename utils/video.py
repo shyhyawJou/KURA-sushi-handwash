@@ -237,9 +237,16 @@ class Video:
         self.hour = now.hour
 
     def _init_video_writer(self):
+        pipeline = (
+            f'appsrc ! videoconvert ! '
+            f'v4l2h264enc extra-controls="encode,video_bitrate={int(self.bitrate * 1e6)},video_gop_size={self.gop}" ! '
+            f'h264parse ! mp4mux ! filesink location={self.video_path} sync=false'
+        )
+
         writer = cv2.VideoWriter(
-            self.video_path,
-            cv2.VideoWriter_fourcc(*'mp4v'),
+            pipeline,
+            cv2.CAP_GSTREAMER,
+            0,
             self.fps,
             (self.frame_w, self.frame_h),
             True
@@ -249,6 +256,7 @@ class Video:
             if writer.isOpened():
                 self.video_writer = writer
                 logger.success(f'開始把 frame 寫入影片: {self.video_path} !')
+                logger.info(f'影片設定: {pipeline}')
             else:
                 self.video_writer = None
                 logger.error(f'{traceback.format_exc()}')

@@ -14,7 +14,7 @@ import numpy as np
 import socket
 import subprocess
 from utils import (Mjpeg_Streamer, 
-                   RTMDet_ONNX, 
+                   RTMDet_DLA, 
                    Camera,
                    Video,
                    setup_logger, MY_LOGGER,
@@ -43,7 +43,7 @@ class App_HandWash:
         CFG['csv']['output_path'] = VIDEO_FOLDER.with_name(f'{date}.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
-        self.ai_model = RTMDet_ONNX(**CFG['AI']['handwash'])
+        self.ai_model = RTMDet_DLA(**CFG['AI']['handwash'])
         self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.origin_video = Video(**CFG['video']['origin'])
         self.result_video = Video(**CFG['video']['result'])
@@ -344,7 +344,7 @@ if __name__ == "__main__":
             
         # 啟動模擬器（非阻塞）
         try:
-            sim_proc = subprocess.Popen(['python', 'simulate_ui_kura.py'])
+            sim_proc = subprocess.Popen(['python3', 'simulate_ui_kura.py'])
         except OSError:
             logger.error(f'啟動 simulate_ui_kura.py 失敗: {traceback.format_exc()} ! 影片目錄: {folder}')
             raise
