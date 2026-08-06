@@ -344,7 +344,7 @@ if __name__ == "__main__":
             
         # 啟動模擬器（非阻塞）
         try:
-            sim_proc = subprocess.Popen(['python', 'simulate_ui_kura.py'])
+            sim_proc = subprocess.Popen(['python3', 'simulate_ui_kura.py'])
         except OSError:
             logger.error(f'啟動 simulate_ui_kura.py 失敗: {traceback.format_exc()} ! 影片目錄: {folder}')
             raise
