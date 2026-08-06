@@ -331,7 +331,9 @@ if __name__ == "__main__":
             continue
         #if folder.name != '20260410':
         #    continue
-        if folder.name != '20260804_live':
+        #if folder.name != '20260804_live':
+        #    continue
+        if folder.name != '20260709':
             continue
 
         # flag
