@@ -285,7 +285,7 @@ class MlvlPointGenerator:
         return prioris
 
 
-class YOLOV9:
+class YOLOV9_ONNX:
     def __init__(self, 
                  path, 
                  score_thresh, 
