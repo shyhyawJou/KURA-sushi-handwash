@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import socket
 import subprocess
+import argparse
 from utils import (Mjpeg_Streamer, 
                    RTMDet_DLA, 
                    Camera,
@@ -28,7 +29,6 @@ from utils import (Mjpeg_Streamer,
 
 
 VIDEO_PATH = None
-VIDEO_FOLDER = None
 
 
 class App_HandWash:
@@ -37,10 +37,10 @@ class App_HandWash:
 
         self.is_running = False
 
-        date = VIDEO_FOLDER.name.split('_')[0]
-        CFG['video']['result']['output_path'] = VIDEO_FOLDER.with_name(date)  # 利用檔名產生輸出檔案
-        CFG['video']['predict']['output_path'] = VIDEO_FOLDER.with_name(date)  # 利用檔名產生輸出檔案
-        CFG['csv']['output_path'] = VIDEO_FOLDER.with_name(f'{date}.csv')  # 利用檔名產生輸出檔案
+        CFG['camera']['video_path'] = str(VIDEO_PATH)  # 要讀取的影片
+        CFG['video']['result']['output_path'] = VIDEO_PATH.name  # 利用檔名產生輸出檔案
+        CFG['video']['predict']['output_path'] =VIDEO_PATH.name  # 利用檔名產生輸出檔案
+        CFG['csv']['output_path'] = VIDEO_PATH.with_stem('.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
         self.ai_model = RTMDet_DLA(**CFG['AI']['handwash'])
@@ -323,84 +323,30 @@ def get_sort_key(path_obj):
 
 
 if __name__ == "__main__":
-    FOLDER = 'video'
-    #FOLDER = 'videos_for_report'
+    desc = 'pass pass = pp, pass fail = pf or fp, fail fail = ff'
+    parser = argparse.ArgumentParser(description=desc)
+    parser.add_argument('-v', help='input video file')
+    args = parser.parse_args()
 
-    for folder in sorted(p(FOLDER).glob('*')):
-        if not folder.is_dir():
-            continue
-        #if folder.name != '20260410':
-        #    continue
-        #if folder.name != '20260804_live':
-        #    continue
-        if folder.name != '20260709':
-            continue
+    if args.v.lower() == 'pp':
+        VIDEO_PATH = 'video/20260410_pp.mp4'
+    elif args.v.lower() in {'pf', 'fp'}:
+        VIDEO_PATH = 'video/20260410_fp.mp4'
+    elif args.v.lower() == 'ff':
+        VIDEO_PATH = 'video/20260410_ff.mp4'
+    else:
+        raise ValueError('-v only allowed pp, pf, fp, ff')
 
-        # flag
-        exit_program = False
+    VIDEO_PATH = p(VIDEO_PATH)
 
-        # 重要變數
-        VIDEO_FOLDER = folder
-            
-        # 啟動模擬器（非阻塞）
-        try:
-            sim_proc = subprocess.Popen(['python3', 'simulate_ui_kura.py'])
-        except OSError:
-            logger.error(f'啟動 simulate_ui_kura.py 失敗: {traceback.format_exc()} ! 影片目錄: {folder}')
-            raise
-
-        # 給它一點時間起來，確認沒有立刻掛掉
-        sleep(0.5)
-        if sim_proc.poll() is not None:
-            logger.error(f'simulate_ui_kura.py 啟動後立即結束，returncode={sim_proc.returncode} !')
-            raise RuntimeError(f'simulate_ui_kura.py exited immediately with returncode {sim_proc.returncode}')
-
-        # 初始化主程式物件
+    # 影片
+    try:
         device_code = socket.gethostname().split('-')[-1]
         app = App_HandWash(device_code)
-
-        # 影片
-        paths = sorted(p(folder).glob('**/*.mp4'), key=get_sort_key)
-        for path in paths:
-            try:
-                if 'result' in path.stem:
-                    continue
-
-                # 更新待讀取的影片
-                VIDEO_PATH = path
-                CFG['camera']['video_path'] = str(VIDEO_PATH)  # 要讀取的影片
-                app.camera = Camera(**CFG['camera'])
-                app.run()
-
-            except:
-                logger.error(f'{path} 發生錯誤: {traceback.format_exc()} !')
-            finally:
-                logger.success('Application terminated !')
-
-                # 退出程式
-                if app:
-                    app.camera.stop()
-                    app.streamer.stop()
-                    
-                    if app.exit_program:
-                        exit_program = True
-                        break
-
-        # 結束 app
+        app.run()
+    except:
+        logger.error(f'推論 {VIDEO_PATH} 發生錯誤: {traceback.format_exc()} !')
+    finally:
         app.stop()
+        logger.success('Application terminated !')
         
-        # 結束模擬器
-        sim_proc.terminate()
-        try:
-            sim_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            logger.warning('simulate_ui_kura.py 未在時限內結束，強制 kill !')
-            sim_proc.kill()
-            sim_proc.wait()
-
-        if sim_proc.returncode not in (0, -15, -9):  # -15=SIGTERM, -9=SIGKILL 都算正常收尾
-            logger.error(f'simulate_ui_kura.py 異常結束，returncode={sim_proc.returncode} !')
-
-        # 退出程式
-        if exit_program:
-            break
