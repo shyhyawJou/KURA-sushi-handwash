@@ -38,3 +38,36 @@ def resize_keep_scale(img, size, mode='corner'):
     canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized_frame
 
     return canvas
+
+
+def paste(img1, img2, roi, feather=20):
+    x1, y1, x2, y2 = roi
+    merged = img2.copy()
+    crop = img1[y1:y2, x1:x2]
+    h, w = crop.shape[:2]
+
+    # 建立 alpha mask
+    mask = np.ones((h, w), dtype=np.float32)
+
+    # 四邊 feather
+    for i in range(feather):
+        alpha = i / feather
+        mask[i, :] *= alpha
+        mask[h - i - 1, :] *= alpha
+        mask[:, i] *= alpha
+        mask[:, w - i - 1] *= alpha
+
+    # 避免全黑
+    mask = np.clip(mask, 0, 1)
+
+    # 擴成三通道
+    mask = mask[:, :, None]
+
+    # blending
+    roi_dst = merged[y1:y2, x1:x2]
+    blended = (
+        crop.astype(np.float32) * mask +
+        roi_dst.astype(np.float32) * (1 - mask)
+    )
+    merged[y1:y2, x1:x2] = blended.astype(np.uint8)
+    return merged

@@ -283,3 +283,77 @@ class MlvlPointGenerator:
              self.offset) * self.strides[level_idx][1]
         prioris = np.stack([x, y], 1).astype('float32')
         return prioris
+
+
+class YOLOV9_ONNX:
+    def __init__(self, 
+                 path, 
+                 score_thresh, 
+                 iou_thresh, 
+                 input_wh, 
+                 classes, 
+                 agnostic_nms=None):
+        import onnxruntime as ort
+        providers = ['CUDAExecutionProvider']
+        self.model = ort.InferenceSession(path, providers=providers)
+        self.agnostic_nms = True if agnostic_nms else False
+        self.score_thresh = score_thresh
+        self.iou_thresh = iou_thresh
+        self.input_wh = input_wh
+        self.input_name = self.model.get_inputs()[0].name
+        self.classes = classes
+
+    def _preprocess(self, img):
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        dst_w, dst_h = self.input_wh
+        h, w = img.shape[:2]
+        scale_w, scale_h = dst_w / w, dst_h / h
+        scale = min(scale_w, scale_h)
+        new_h, new_w = int(h * scale), int(w * scale)
+
+        if scale_w < scale_h:
+            dx, dy = [0, (dst_h - new_h) // 2]  # x, y
+        else:
+            dx, dy = [(dst_w - new_w) // 2, 0]  # x, y
+        
+        img = cv2.resize(img, (new_w, new_h))
+        x = np.full((dst_h, dst_w, 3), 114, 'uint8')
+        x[dy : dy + new_h, dx : dx + new_w] = img
+        x = x / 255.
+        x = x[None].astype('float32')
+        x = x.transpose(0, 3, 1, 2)
+        return x, dx, dy, scale
+
+    def __call__(self, img):
+        x, dx, dy, scale = self._preprocess(img)
+        boxes = self.model.run(None, {self.input_name: x})[0].reshape(len(self.classes) + 4, -1).T
+        boxes = self._xywh_to_xyxy(boxes)
+        scores, boxes, pred_labels = self._postprocess(img.shape[:2], boxes, dx, dy, scale)
+        return scores, boxes, pred_labels
+
+    def _postprocess(self, img_hw, org_boxes, dx, dy, scale):
+        OFFSET_WH = 4096
+        boxes, scores = np.split(org_boxes, [4], 1)
+        scores, pred_labels = scores.max(1), scores.argmax(1)
+        boxes_nms = boxes.copy()
+        boxes_nms[:, 2:4] -= boxes_nms[:, 0:2]
+        if not self.agnostic_nms:
+            boxes_nms[:, 0] += OFFSET_WH * pred_labels
+        ids = cv2.dnn.NMSBoxes(boxes_nms, scores, self.score_thresh, self.iou_thresh)
+        if len(ids) == 0:
+            scores, boxes, pred_labels = np.array([]), np.array([]), np.array([])
+        else:
+            scores, boxes = scores[ids], boxes[ids]
+            boxes = (boxes - [dx, dy, dx, dy]) / scale
+            boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img_hw[1])
+            boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, img_hw[0])
+            pred_labels = pred_labels[ids]
+        return scores, boxes, pred_labels
+
+    def _xywh_to_xyxy(self, boxes):
+        x0y0 = boxes[:, 0:2] - boxes[:, 2:4] / 2.
+        x1y1 = boxes[:, 0:2] + boxes[:, 2:4] / 2.
+        boxes[:, 0:2] = x0y0
+        boxes[:, 2:4] = x1y1
+        return boxes
+
