@@ -218,11 +218,11 @@ class HandWashTracker:
         # 有做洗手動作或兩手有交集都算有效
         if len(hands) > 0 and np.any(scrub_hand_mask):
             self._do_step(12)
-        elif len(hands) >= 2:
-            ious = get_iou(hands, hands)
-            np.fill_diagonal(ious, 0)
-            if np.any(ious >= self.cfg['scrub_overlap_thresh']):
-                self._do_step(12)
+        #elif len(hands) >= 2:
+        #    ious = get_iou(hands, hands)
+        #    np.fill_diagonal(ious, 0)
+        #    if np.any(ious >= self.cfg['scrub_overlap_thresh']):
+        #        self._do_step(12)
         else:
             self._undo_step(12)
         
