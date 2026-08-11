@@ -40,7 +40,7 @@ class App_HandWash:
         CFG['camera']['video_path'] = str(VIDEO_PATH)  # 要讀取的影片
         CFG['video']['result']['output_path'] = VIDEO_PATH.name  # 利用檔名產生輸出檔案
         CFG['video']['predict']['output_path'] =VIDEO_PATH.name  # 利用檔名產生輸出檔案
-        CFG['csv']['output_path'] = VIDEO_PATH.with_stem('.csv')  # 利用檔名產生輸出檔案
+        CFG['csv']['output_path'] = VIDEO_PATH.with_suffix('.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
         self.ai_model = RTMDet_DLA(**CFG['AI']['handwash'])
