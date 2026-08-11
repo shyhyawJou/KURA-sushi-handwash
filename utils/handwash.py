@@ -46,7 +46,6 @@ class HandWashTracker:
         self.reset()
 
     def reset(self):
-        self.has_soaped = False 
         self.now = time()       
         self.finish_reason = None
         self.detecting_step = self.cfg['init_step_num']
@@ -192,8 +191,8 @@ class HandWashTracker:
         step_labels = detections['label'][mask]
 
         for i in range(1, 12):
-            # step 1 和 8 只需要判斷其中一個, 用是否有沾過肥皂區分
-            if i == (1 if self.has_soaped else 8):
+            # step 1 和 8 只需要檢測其中一個
+            if i == (1 if self.detecting_step > 2 else 8):  # 做完肥皂後的洗手視為 step8
                 continue
 
             # 如果是檢測中的步驟, 觸發條件較寬鬆
@@ -262,14 +261,6 @@ class HandWashTracker:
             # 儲存
             if self.step_confirmed[step_id]:
                 self._update_record(step_id)
-
-                # 肥皂
-                if step_id == 2:
-                    self.has_soaped = True
-                    logger.info(f'[{self.zone_name}] Soaped !')
-                elif step_id == self.detecting_step == 8:
-                    self.has_soaped = False
-                    logger.info(f'[{self.zone_name}] Rinsed !')
 
             # reset
             self.reset_step_info(step_id)
