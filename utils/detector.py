@@ -15,7 +15,8 @@ class RTMDet:
                  input_wh, 
                  classes, 
                  agnostic_nms=None):
-        
+
+        self.path = path
         self.model = None
         self.input_wh = input_wh
         self.agnostic_nms = agnostic_nms
@@ -31,6 +32,7 @@ class RTMDet:
         assert len(self.classes) == len(self.score_threshs)
         self._load_model(path)
         self._warmup()
+        logger.success(f'load {self.path} !')
         logger.warning(f'每類的信心分數閥值: {self.score_threshs} (有先進行 max(conf - 0.2, 0.05))')
 
     def __call__(self, img):
