@@ -10,7 +10,7 @@ from loguru import logger
 class RTMDet:
     def __init__(self, 
                  path, 
-                 score_thresh, 
+                 score_threshs, 
                  iou_thresh, 
                  input_wh, 
                  classes, 
@@ -20,7 +20,7 @@ class RTMDet:
         self.input_wh = input_wh
         self.agnostic_nms = agnostic_nms
         self.agnostic_nms_labels = self._create_agnostic_nms_labels(classes)
-        self.score_thresh = score_thresh
+        self.score_threshs = np.maximum(np.array(score_threshs) - 0.2, 0.05)
         self.iou_thresh = iou_thresh            
         self.strides = [8, 16, 32]
         self.mean = np.asarray([103.53, 116.28, 123.675], 'float32')
@@ -28,8 +28,10 @@ class RTMDet:
         self.grids = self._make_grids().astype('float32')
         self.is_onnx = p(path).suffix.lower() == '.onnx'
         self.classes = classes
+        assert len(self.classes) == len(self.score_threshs)
         self._load_model(path)
         self._warmup()
+        logger.warning(f'每類的信心分數閥值: {self.score_threshs} (有先進行 max(conf - 0.2, 0.05))')
 
     def __call__(self, img):
         x, scale = self._preprocess(img)
@@ -64,7 +66,7 @@ class RTMDet:
         boxes, scores = boxes[0].T, scores[0].T
         scores, pred_labels = scores.max(1), scores.argmax(1)
 
-        ids = (scores >= self.score_thresh)
+        ids = scores >= self.score_threshs[pred_labels]
         scores, boxes, pred_labels = scores[ids], boxes[ids], pred_labels[ids]
         boxes_nms = boxes.copy()
         boxes_nms[:, 2:4] -= boxes[:, 0:2]
@@ -152,9 +154,6 @@ class RTMDet:
     
 
 class RTMDet_ONNX(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
-
     def _forward(self, x):
         y = self.model.run(None, {self.input_name: x})[0]
         return y
@@ -167,9 +166,6 @@ class RTMDet_ONNX(RTMDet):
 
 
 class RTMDet_TFLITE(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
-
     def _forward(self, x):
         self.model.set_tensor(self.input_id, x)
         self.model.invoke()
@@ -189,9 +185,6 @@ class RTMDet_TFLITE(RTMDet):
 
 
 class RTMDet_DLA(RTMDet):
-    def __init__(self, path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms=None):
-        super().__init__(path, score_thresh, iou_thresh, input_wh, classes, agnostic_nms)
-
     def _forward(self, x):
         y = self.model.run(x).reshape(1, -1, self.grids.shape[0])
         return y
