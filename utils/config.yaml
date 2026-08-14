@@ -32,9 +32,14 @@ AI:
         #path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20.onnx'
         #path: 'best_0.8560_0.7360_epoch_27_tmp12.onnx'
         #path: 'best_0.8360_0.7120_epoch_30_tmp13.onnx'
-        path: 'best_0.8960_0.7520_epoch_34_tmp16.onnx'
-        score_thresh: 0.5
-        iou_thresh: 0.1
+        #path: 'best_0.8960_0.7520_epoch_34_tmp16.onnx'
+        #path: 'best_0.8950_0.7670_epoch_31_kura_handwash_v1.onnx'
+        #path: 'best_0.9070_0.7650_epoch_30_kura_handwash_v1.onnx'
+        #path: 'best_0.9070_0.7650_epoch_30_kura_handwash_v1.onnx'
+        path: 'best_0.9110_0.7850_epoch_17_kura_handwash_v2.onnx'
+        #score_threshs: [0.8, 0.75, 0.9, 0.7, 0.2, 0.35, 0.65, 0.65, 0.25, 0.95, 0.75, 0.7, 0.6]  # kura_handwash_v1
+        score_threshs: [0.9, 0.95, 0.95, 0.3, 0.05, 0.3, 0.6, 0.65, 0.45, 0.95, 0.85, 0.9, 0.4]  # kura_handwash_v2
+        iou_thresh: 0.4
         input_wh: [448, 448]
 
         classes:
@@ -57,16 +62,16 @@ AI:
                 class:
                     - 'handwash'
                     - 'trigger soap dispenser'
-                    - 'palm to palm'
+                    #- 'palm to palm'
                     - 'palm over back'
-                    - 'interlaced fingers'
+                    #- 'interlaced fingers'
                     - 'thumb or wrist scrub'
                     - 'scrub under nails'
                     - 'handwash'
                     - 'wipe hands with tissue'
                     - 'UV sterilization'
                     - 'spray alcohol'
-                iou_thresh: 0.1
+                iou_thresh: 0.4
             #- 
             #    class:
             #        - 'left'

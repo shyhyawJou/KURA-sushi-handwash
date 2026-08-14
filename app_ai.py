@@ -333,8 +333,12 @@ if __name__ == "__main__":
         #    continue
         #if folder.name != '20260804_live':
         #    continue
-        if folder.name != '20260709':
+        #if folder.name != '20260709':
+        #    continue
+        if folder.name != '20260806':
             continue
+        #if folder.name != 'demo_gg':
+        #    continue
 
         # flag
         exit_program = False
