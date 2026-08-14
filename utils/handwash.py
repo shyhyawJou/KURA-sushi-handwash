@@ -240,11 +240,15 @@ class HandWashTracker:
             self.step_confirmed[step_id] = True
             self.step_confirmed_times[step_id] = self.now
             logger.debug(f'[{self.zone_name}] Step {step_id}: action confirmed !')
-            
+
+            # step12 一滿足就 reset
+            if step_id == 12 and step_id != self.detecting_step:
+                self._undo_step(step_id, force=True)
+
         # 計算做了多久
         self._compute_step_duration(step_id)  
 
-    def _undo_step(self, step_id):        
+    def _undo_step(self, step_id, force=False):        
         # 必要處理
         self.last_start_times[step_id] = None
 
@@ -255,15 +259,20 @@ class HandWashTracker:
         #if step_id == self.detecting_step:
             return
 
-        # idle 處理
-        self.idle_frames[step_id] += 1
-        if self.idle_frames[step_id] == self.cfg['action_frame'][step_id] // 2:
-            # 儲存
-            if self.step_confirmed[step_id]:
-                self._update_record(step_id)
-
-            # reset
+        # 強制結束
+        if force:
+            self._update_record(step_id)
             self.reset_step_info(step_id)
+        else:
+            # idle 處理
+            self.idle_frames[step_id] += 1
+            if self.idle_frames[step_id] == self.cfg['action_frame'][step_id] // 2:
+                # 儲存
+                if self.step_confirmed[step_id]:
+                    self._update_record(step_id)
+
+                # reset
+                self.reset_step_info(step_id)
 
     def _do_scrub_count(self, step_id):
         if step_id not in self.srcub_steps:
