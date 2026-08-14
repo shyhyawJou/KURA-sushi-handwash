@@ -30,9 +30,7 @@ VIDEO_PATH = None
 
 
 class App_HandWash:
-    def __init__(self, device_code):
-        setup_logger(**CFG['log'], suffix=device_code)
-
+    def __init__(self):
         self.is_running = False
 
         self.camera = Camera(**CFG['camera'])
@@ -266,7 +264,8 @@ class App_HandWash:
 if __name__ == "__main__":
     try:
         device_code = socket.gethostname().split('-')[-1]
-        app = App_HandWash(device_code)
+        setup_logger(**CFG['log'], suffix=device_code)
+        app = App_HandWash()
         app.run()
     except:
         logger.error(traceback.format_exc())
