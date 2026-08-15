@@ -17,10 +17,12 @@ from .tool import get_now_str, get_utc_offset
 
 
 class Clip:
-    def __init__(self, root_dir, enable, tag, crf):
+    def __init__(self, root_dir, enable, tag, crf, bitrate, fps):
         self.root_dir = root_dir
         self.tag = tag
         self.crf = crf
+        self.bitrate = bitrate
+        self.fps = fps
         self.suffix = f'_{tag.lower()}' if tag else ''
         self.is_enable = enable 
         if not self.is_enable:
@@ -125,7 +127,8 @@ class Clip:
     def _encode_video(self, save_video):
         """在背景執行緒跑 ffmpeg,不阻塞呼叫端。"""
         data = {'save_dir': self.save_dir, 'video_path': self.video_path, 
-                'csv_path': self.csv_path, 'save_video': save_video, 'tag': self.tag}
+                'csv_path': self.csv_path, 'save_video': save_video, 'tag': self.tag,
+                'fps': self.fps, 'bitrate': self.bitrate}
         self.video_thread = Thread(target=self._run_ffmpeg, args=(data,), daemon=True)
         self.video_thread.start()
 
@@ -137,6 +140,8 @@ class Clip:
             csv_path = data['csv_path']
             save_video = data['save_video']
             tag = data['tag']
+            fps = data['fps']
+            bitrate = data['bitrate']
 
             # 不運作
             if not save_video:
@@ -147,7 +152,7 @@ class Clip:
                 logger.warning(f'[{tag}] no frame found in {save_dir} or number of frame < 2, skip ffmpeg encoding !')
                 return
 
-            fps = self._calc_fps_from_filenames(tag, frames)
+            #fps = self._calc_fps_from_filenames(tag, frames)
 
             list_path = save_dir / 'frames.txt'
             with open(list_path, 'w', encoding='utf-8') as f:
@@ -163,11 +168,16 @@ class Clip:
                 '-r', str(round(fps, 2)),
                 '-vsync', 'cfr',
                 '-pix_fmt', 'yuv420p',
-                '-c:v', 'libx264',
-                '-preset', 'fast',
-                '-crf', str(self.crf),
+                '-c:v', 'h264_v4l2m2m',
+                '-b:v', f'{round(bitrate, 1)}M',           # 位元率
+                '-maxrate', f'{round(bitrate * 2, 1)}M',
+                '-bufsize', f'{round(bitrate * 4, 1)}M',
+                '-g', str(int(fps * 2)),         # gop
+                '-num_output_buffers', '32',
+                '-num_capture_buffers', '32',
                 str(video_path),
             ]
+            logger.info(f'ffmpeg command: {cmd}')
 
             logger.info(f'[{tag}] start encoding video: {video_path} (fps={fps:.2f}) ...')
             proc = subprocess.Popen(
@@ -178,7 +188,7 @@ class Clip:
             t1 = time()
 
             if proc.returncode == 0:
-                logger.success(f'[{tag}] encoded video successfully: {video_path}, frame: {len(frames)}, {t1 - t0:.3f} (s) !')
+                logger.success(f'[{tag}] encoded video successfully: {video_path}, frame: {len(frames)}, fps: {fps:.2f}, {t1 - t0:.3f} (s) !')
             else:
                 logger.error(f'[{tag}] encode video failed! returncode={proc.returncode}\n{stderr}, {t1 - t0:.3f} (s)')
                 if video_path.exists():

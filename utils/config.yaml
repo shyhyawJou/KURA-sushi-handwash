@@ -145,10 +145,14 @@ clip:
         root_dir: 'log/record/clip'
         enable: true
         crf: 18
+        bitrate: 2.5
+        fps: 30
     result:
         root_dir: 'log/record/clip'
         enable: true
         crf: 23
+        bitrate: 1
+        fps: 30
 
 visualization:
     bbox:
