@@ -70,10 +70,12 @@ class Clip:
             if save_video and is_interrupted:
                 self.video_thread.join(5.)
 
-            if is_interrupted:
-                for path in self.save_dir.parent.glob('*'):
-                    if path.is_dir():
-                        shutil.rmtree(path)
+        if is_interrupted:
+            date = get_now_str(time(), utc=False)[:8]
+            folder = p(self.root_dir) / date
+            for path in folder.glob('*'):
+                if path.is_dir():
+                    shutil.rmtree(path)
 
         self._reset()
 
