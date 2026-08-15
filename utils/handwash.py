@@ -69,6 +69,7 @@ class HandWashTracker:
         self.pub_no_hand_zero = False
         self.saved_steps = []
         self.is_final = False  # 重置訊號
+        self.login_time = None
         
         # 使用者資訊
         self.user_id = None
@@ -344,6 +345,7 @@ class HandWashTracker:
             "Login Mode": self.login_mode,
             "Step Sequence": self.steps.ids.copy(),
             "Finished Step": sum(self.steps.is_detecting_steps),
+            "Login Time": self.login_time,
             "Start Time": [get_now_str(t) for t in self.steps.start_times], 
             "Action Confirmed Time": [get_now_str(t) for t in self.steps.step_confirmed_times], 
             "End Time": [get_now_str(t) for t in self.steps.end_times],
