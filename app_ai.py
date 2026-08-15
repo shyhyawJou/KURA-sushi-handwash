@@ -232,7 +232,6 @@ class App_HandWash:
         else:
             logger.warning(f'received {signum} signal !')
         self.exit_program = True
-        self.stop()
 
     def stop(self):
         # CSV
@@ -284,4 +283,5 @@ if __name__ == "__main__":
     except:
         logger.error(traceback.format_exc())
     finally:
+        app.stop()
         logger.success('Application terminated !')
