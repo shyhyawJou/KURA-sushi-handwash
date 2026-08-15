@@ -69,6 +69,8 @@ class Clip:
             self._encode_video(save_video)
             if save_video and is_interrupted:
                 self.video_thread.join(5.)
+
+            if is_interrupted:
                 for path in self.save_dir.parent.glob('*'):
                     if path.is_dir():
                         shutil.rmtree(path)
