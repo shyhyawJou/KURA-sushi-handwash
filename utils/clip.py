@@ -67,7 +67,7 @@ class Clip:
 
         if self.save_dir:
             self._encode_video(save_video)
-            if save_video and is_interrupted and self.save_dir:
+            if save_video and is_interrupted:
                 self.video_thread.join(5.)
                 for path in self.save_dir.parent.glob('*'):
                     if path.is_dir():
