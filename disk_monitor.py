@@ -12,7 +12,7 @@ THRESHOLD_GB = 1
 THRESHOLD_BYTES = THRESHOLD_GB * (1024 ** 3)
 TIME_INTERVAL = 30
 LOG_FILE = "/mnt/reserved/disk_monitor.log"  # 建議檢查開頭是否有 /
-BIG_FILE_DIR = "/mnt/reserved/record/stream/"
+BIG_FILE_DIR = "/mnt/reserved/record"
 
 logger.add(LOG_FILE, level="INFO")
 

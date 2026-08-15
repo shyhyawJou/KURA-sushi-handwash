@@ -24,7 +24,7 @@ from utils import (Mjpeg_Streamer,
                    draw_timestamp, draw_debug_panel, plot_bbox,
                    Timer,
                    MQTT,
-                   get_now_str, get_boxes_outside,
+                   get_now_str, get_utc_offset, get_boxes_outside,
                    CFG, SYS_CFG)
 
 
@@ -208,7 +208,9 @@ class App_HandWash:
 
                         # 畫時間戳
                         now_str = get_now_str(now, utc=False)
-                        draw_timestamp(frame_copy, now_str, **CFG['visualization']['timestamp'])
+                        offset = get_utc_offset()
+                        offset = f'+{offset}' if offset > 0 else str(offset) 
+                        draw_timestamp(frame_copy, f'{now_str} ({offset})', **CFG['visualization']['timestamp'])
 
                     # push to streamer
                     with streamer_timer:
@@ -220,6 +222,15 @@ class App_HandWash:
                         self.result_video.write_frame(frame_copy)
                         if np.isin(pred_labels, self.wash_labels).any():
                             self.predict_video.write_frame(frame)
+
+                        # 錄影
+                        if self.tracker_left.is_login:
+                            self.tracker_left.origin_clip.write_frame(frame, now)
+                            self.tracker_left.result_clip.write_frame(frame_copy, now)
+
+                        if self.tracker_right.is_login:
+                            self.tracker_right.origin_clip.write_frame(frame, now)
+                            self.tracker_right.result_clip.write_frame(frame_copy, now)
 
                 # log time elapsed
                 MY_LOGGER.log(f'[{loop_timer.name}] {loop_timer.elapsed:.6f} (s)', 'INFO', reset=False)
@@ -250,8 +261,8 @@ class App_HandWash:
 
     def stop(self):
         # CSV
-        res_l = self.tracker_left.stop()
-        res_r = self.tracker_right.stop()
+        res_l = self.tracker_left.stop(self.exit_program)
+        res_r = self.tracker_right.stop(self.exit_program)
         if res_l:
             self.csv_manager.write_record(res_l)
         if res_r:

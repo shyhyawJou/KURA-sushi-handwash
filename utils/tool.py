@@ -26,7 +26,7 @@ def get_now_str(now, utc=True):
     return now
 
 
-def get_utc_offset_str():
+def get_utc_offset() -> int:
     """ 單位: 小時 """
     offset = datetime.now().astimezone().utcoffset()
     hour = int(offset.total_seconds() / 3600)
