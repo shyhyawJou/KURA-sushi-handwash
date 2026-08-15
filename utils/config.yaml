@@ -125,10 +125,14 @@ clip:
         root_dir: 'log/record/clip'
         enable: true
         crf: 18
+        bitrate: 2.5
+        fps: 30
     result:
         root_dir: 'log/record/clip'
         enable: true
         crf: 23
+        bitrate: 1
+        fps: 30
 
 visualization:
     bbox:
@@ -163,7 +167,7 @@ visualization:
 logic:
     # 秒數相關
     time_parameter:
-        time_scale: 1.         # 因為 server 跑速快很多
+        time_scale: 1.             # 因為 server 跑速快很多
         pub_hand_delay: 0.5        # 連續幾秒手狀態切換後才開始通知系統
 
     # 前端和我共用的參數

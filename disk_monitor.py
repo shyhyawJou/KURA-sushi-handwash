@@ -12,7 +12,7 @@ THRESHOLD_GB = 1
 THRESHOLD_BYTES = THRESHOLD_GB * (1024 ** 3)
 TIME_INTERVAL = 30
 LOG_FILE = "/mnt/reserved/disk_monitor.log"  # 建議檢查開頭是否有 /
-BIG_FILE_DIR = "/mnt/reserved/record"
+BIG_FILE_DIR = "/mnt/reserved/record/clip"
 
 logger.add(LOG_FILE, level="INFO")
 
@@ -31,6 +31,11 @@ def get_dir_size(path: Path):
     """計算目錄總大小 (Bytes)"""
     return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file())
 
+
+def get_file_size(path: Path):
+    """取得檔案大小 (Bytes)"""
+    return path.stat().st_size
+    
 
 def custom_cleanup_logic():
     base_path = Path(BIG_FILE_DIR)
@@ -54,23 +59,28 @@ def custom_cleanup_logic():
 
     print(f"Need to free up approximately: {needed_size / (1024**2):.2f} MB")
 
-    # 2. 取得並按大小排序 (從小到大)
-    folder_list = []
+    # 2. 取得並按日期排序
+    items = []
     for f in base_path.iterdir():
         if f.is_dir():
-            # 使用先前定義的 get_dir_size
-            folder_list.append((f, get_dir_size(f)))
+            items.append((f, get_dir_size(f)))
+        else:
+            items.append((f, get_file_size(f)))
     
-    folder_list.sort(key=lambda x: x[1])
+    items.sort(key=lambda x: x[0].stem)
 
     # 3. 進入刪除迴圈，累加刪除量
     accumulated_deleted_size = 0
     
-    for folder, size in folder_list:
+    for file, size in items:
         try:
-            shutil.rmtree(folder)
+            if file.is_dir():
+                shutil.rmtree(file)
+            else:
+                file.unlink()
+
             accumulated_deleted_size += size
-            print(f"Deleted: {folder.name} ({size / (1024**2):.2f} MB)")
+            print(f"Deleted: {file.name} ({size / (1024**2):.2f} MB)")
             
             # 判斷累積刪除量是否已達標
             if accumulated_deleted_size >= needed_size:
@@ -79,7 +89,7 @@ def custom_cleanup_logic():
                 
         except Exception as e:
             # 發生錯誤（如 Read-only）時，不累加大小並跳過
-            print(f"Failed to delete {folder}: {e}")
+            print(f"Failed to delete {file}: {e}")
             if "Read-only file system" in str(e):
                 print("Critical: Disk is Read-only. Aborting cleanup.")
                 break
