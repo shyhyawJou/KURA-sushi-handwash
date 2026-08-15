@@ -72,7 +72,7 @@ device:
 
 log:
     folder: '/mnt/reserved/log'
-    level: INFO
+    level: TRACE
 
 throttled_logger:
     log_interval: 60
