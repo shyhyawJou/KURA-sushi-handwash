@@ -402,6 +402,7 @@ if __name__ == "__main__":
                         break
 
         # 結束 app
+        app.exit_program = True
         app.stop()
         
         # 結束模擬器
@@ -419,6 +420,3 @@ if __name__ == "__main__":
         # 退出程式
         if exit_program:
             break
-
-    app.exit_program = True
-    app.stop()
