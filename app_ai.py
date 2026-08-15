@@ -358,6 +358,7 @@ if __name__ == "__main__":
     except:
         logger.error(f'推論 {VIDEO_PATH} 發生錯誤: {traceback.format_exc()} !')
     finally:
+        app.exit_program = True
         app.stop()
         logger.success('Application terminated !')
         
