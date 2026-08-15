@@ -3,8 +3,10 @@ from numpy.linalg import norm as np_norm
 from time import time, sleep
 from threading import Event
 from loguru import logger
-from .tool import get_iou, get_now_str, get_utc_offset_str
+from .tool import get_iou, get_now_str, get_utc_offset
 from .step import Step_History, MyDict
+from .clip import Clip
+from .cfg import CFG
 
 
 
@@ -44,6 +46,10 @@ class HandWashTracker:
 
         # 初始化
         self.reset()
+
+        # 錄影
+        self.origin_clip = Clip(**CFG['clip']['origin'], tag=f'{self.zone_name}_Origin')
+        self.result_clip = Clip(**CFG['clip']['result'], tag=f'{self.zone_name}_Result')
 
     def reset(self):
         self.now = time()       
@@ -90,7 +96,7 @@ class HandWashTracker:
         logger.info(f'[{self.zone_name}] Reset all handwash information ! '
                     f'Detecting step become: {self.detecting_step} !')
 
-    def update(self, detections, img, now):
+    def update(self, detections, frame, now):
         self.now = now
         
         export_data = None
@@ -163,10 +169,12 @@ class HandWashTracker:
                     self.is_login = True
                     self.has_hand_start_time = None
                     self.no_hand_start_time = None
+                    self.origin_clip.start()
+                    self.result_clip.start()
             else:
                 self.has_hand_start_time = None
 
-        # 狀態
+        # 即時狀態和錄影
         if self.is_login:
             self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
 
@@ -249,15 +257,24 @@ class HandWashTracker:
         self._compute_step_duration(step_id)  
 
     def _undo_step(self, step_id, force=False):        
-        # 必要處理
-        self.last_start_times[step_id] = None
-
         # 跳過不處理
         if self.frames[step_id] == 0:
+            self.last_start_times[step_id] = None
             return
+
+        # 如果是檢測中的步驟, 即使中斷一定的幀數, 仍累積洗手次數和時長 
         if step_id == self.detecting_step and self.step_confirmed[step_id]:
-        #if step_id == self.detecting_step:
+            self.idle_frames[step_id] += 1
+            if self.idle_frames[step_id] <= self.cfg['valid_idle_frame']:
+                self.frames[step_id] += 1
+                self.end_times[step_id] = self.now
+                self._compute_step_duration(step_id)
+            else:
+                self.last_start_times[step_id] = None  # reset
             return
+
+        # 非檢測中步驟或未滿動作確認幀數, 進行 reset
+        self.last_start_times[step_id] = None
 
         # 強制結束
         if force:
@@ -266,6 +283,8 @@ class HandWashTracker:
         else:
             # idle 處理
             self.idle_frames[step_id] += 1
+
+            # reset
             if self.idle_frames[step_id] == self.cfg['action_frame'][step_id] // 2:
                 # 儲存
                 if self.step_confirmed[step_id]:
@@ -321,9 +340,10 @@ class HandWashTracker:
             "Store ID": "test", 
             "User ID": '' if self.login_mode == 'hand' else str(self.user_id),
             "User Name": '' if self.login_mode == 'hand' else str(self.user_name),
-            "UTC Offset": get_utc_offset_str(),
+            "UTC Offset": get_utc_offset(),
             "Login Mode": self.login_mode,
             "Step Sequence": self.steps.ids.copy(),
+            "Finished Step": sum(self.steps.is_detecting_steps),
             "Start Time": [get_now_str(t) for t in self.steps.start_times], 
             "Action Confirmed Time": [get_now_str(t) for t in self.steps.step_confirmed_times], 
             "End Time": [get_now_str(t) for t in self.steps.end_times],
@@ -340,7 +360,7 @@ class HandWashTracker:
             res[f'Step{i} min time'] = self.sys_cfg[i-1]['washtimemax']
         return res
 
-    def _finalize_session(self):
+    def _finalize_session(self, is_interrupted):
         """ 結束 Session 並回傳資料 """
         # finish reason
         if self.finish_reason is None:  # 被 kill
@@ -352,6 +372,10 @@ class HandWashTracker:
             logger.debug(f'[{self.zone_name}] Completed with no any step! Skip to save CSV !')
         else:
             logger.info(f'[{self.zone_name}] Completed with {n_step} steps! ')
+
+        # clip
+        self.origin_clip.stop(n_step != 0, is_interrupted)
+        self.result_clip.stop(n_step != 0, is_interrupted)
         return final_data
 
     def _update_debug_info(self, hands=[]):
@@ -446,7 +470,7 @@ class HandWashTracker:
 
         return msgs
 
-    def stop(self):
+    def stop(self, is_interrupted=False):
         """
         強制停止當前 session。
         把當下所有 step_confirmed 但尚未寫入 self.steps 的步驟，
@@ -495,7 +519,7 @@ class HandWashTracker:
                     logger.success(f'alerted the order of washing step, origin: {ori_steps}, alerted: {new_steps} !')
             
         # 輸出最終結果
-        export_data = self._finalize_session()
+        export_data = self._finalize_session(is_interrupted)
         logger.warning(f'[{self.zone_name}] Session stop because of "{self.finish_reason}" !')
 
         self.reset()
@@ -524,6 +548,8 @@ class HandWashTracker:
         logger.info(f'[{self.zone_name}] UI became login, '
                     f'[User ID]: {self.user_id}, '
                     f'[User Name]: {self.user_name} !')
+        self.origin_clip.start()
+        self.result_clip.start()
 
     def logout_callback(self, cmd):
         logger.warning(f'[{self.zone_name}] UI became logout !')

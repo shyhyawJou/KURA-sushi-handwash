@@ -26,7 +26,7 @@ AI:
         #path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20_fp16.dla'
         path: 'best_0.9110_0.7850_epoch_17_kura_handwash_v2_fp16.dla'
         #score_threshs: [0.8, 0.75, 0.9, 0.7, 0.2, 0.35, 0.65, 0.65, 0.25, 0.95, 0.75, 0.7, 0.6]  # kura_handwash_v1
-        score_threshs: [0.9, 0.95, 0.95, 0.3, 0.05, 0.3, 0.6, 0.65, 0.45, 0.95, 0.85, 0.9, 0.4]  # kura_handwash_v2
+        score_threshs: [0.9, 0.9, 0.95, 0.25, 0.05, 0.3, 0.75, 0.7, 0.35, 0.95, 0.85, 0.9, 0.2]
         iou_thresh: 0.4
         input_wh: [448, 448]
 
@@ -84,7 +84,7 @@ csv:
 video:
     # 原始影片
     origin: 
-        enable: true  # 要不要啟動錄影 (不管其他參數)
+        enable: false  # 要不要啟動錄影 (不管其他參數)
         base_dir: /mnt/reserved/record/stream
         frame_w: 640
         frame_h: 480
@@ -110,7 +110,7 @@ video:
 
     # 結果影片
     result:
-        enable: true  # 要不要啟動錄影 (不管其他參數)
+        enable: false  # 要不要啟動錄影 (不管其他參數)
         base_dir: /mnt/reserved/record/stream
         frame_w: 640
         frame_h: 480
@@ -136,7 +136,7 @@ video:
 
     # 有 AI 檢測框的影片
     predict: 
-        enable: true  # 要不要啟動錄影 (不管其他參數)
+        enable: false  # 要不要啟動錄影 (不管其他參數)
         base_dir: /mnt/reserved/record/predict
         frame_w: 640
         frame_h: 480
@@ -159,6 +159,21 @@ video:
         bitrate: 2
         suffix: '_predict'
         output_path: null  # null 會自動產生路徑
+
+# suffix 可能會在某些物件初始化的時候給值
+clip:
+    origin:
+        root_dir: 'log/record/clip'
+        enable: true
+        crf: 18
+        bitrate: 2.5
+        fps: 30
+    result:
+        root_dir: 'log/record/clip'
+        enable: true
+        crf: 23
+        bitrate: 1
+        fps: 30
 
 visualization:
     bbox:
@@ -260,6 +275,7 @@ logic:
             10: [10]
             11: [11]
 
+        valid_idle_frame: 10
     login:
         0: 'hand'
         1: 'scanner'
