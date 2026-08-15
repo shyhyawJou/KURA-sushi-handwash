@@ -170,6 +170,7 @@ class HandWashTracker:
                     self.is_login = True
                     self.has_hand_start_time = None
                     self.no_hand_start_time = None
+                    self.login_time = get_now_str(self.now, utc=True)
                     self.origin_clip.start()
                     self.result_clip.start()
             else:
@@ -552,6 +553,7 @@ class HandWashTracker:
                     f'[User Name]: {self.user_name} !')
         self.origin_clip.start()
         self.result_clip.start()
+        self.login_time = get_now_str(self.now, utc=True)
 
     def logout_callback(self, cmd):
         logger.warning(f'[{self.zone_name}] UI became logout !')
