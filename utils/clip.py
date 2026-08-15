@@ -91,9 +91,10 @@ class Clip:
                 # 第一個 frame
                 if self.first_time is None:
                     logger.info(f"[{self.tag}] first frame's time information: {now_str} !")
-                    self.save_dir = p(f'{self.root_dir}/{now_str}{self.suffix}')
-                    self.csv_path = p(f'{self.root_dir}/{now_str}{self.suffix}.csv')
-                    self.video_path = p(f'{self.root_dir}/{now_str}{self.suffix}.mp4')
+                    date = now_str[:8]
+                    self.save_dir = p(f'{self.root_dir}/{date}/{now_str}{self.suffix}')
+                    self.csv_path = p(f'{self.root_dir}/{date}/{now_str}{self.suffix}.csv')
+                    self.video_path = p(f'{self.root_dir}/{date}/{now_str}{self.suffix}.mp4')
                     os.makedirs(self.save_dir, exist_ok=True)
                     self._write_csv_header()
                     self.first_time = (now_str, time_offset)
