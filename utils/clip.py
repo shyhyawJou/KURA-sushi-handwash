@@ -67,9 +67,9 @@ class Clip:
 
         if self.save_dir:
             self._encode_video(save_video)
-            if is_interrupted:
+            if save_video and is_interrupted and self.save_dir:
                 self.video_thread.join(5.)
-                for path in p(self.root_dir).glob('*'):
+                for path in self.save_dir.parent.glob('*'):
                     if path.is_dir():
                         shutil.rmtree(path)
 
@@ -169,13 +169,9 @@ class Clip:
                 '-r', str(round(fps, 2)),
                 '-vsync', 'cfr',
                 '-pix_fmt', 'yuv420p',
-                '-c:v', 'h264_v4l2m2m',
-                '-b:v', f'{round(bitrate, 1)}M',           # 位元率
-                '-maxrate', f'{round(bitrate * 2, 1)}M',
-                '-bufsize', f'{round(bitrate * 4, 1)}M',
-                '-g', str(int(fps * 2)),         # gop
-                '-num_output_buffers', '32',
-                '-num_capture_buffers', '32',
+                '-c:v', 'libx264',
+                '-preset', 'fast',
+                '-crf', str(self.crf),
                 str(video_path),
             ]
             logger.info(f'ffmpeg command: {cmd}')
