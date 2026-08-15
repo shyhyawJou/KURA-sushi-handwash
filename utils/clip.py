@@ -2,7 +2,7 @@ import cv2
 from pathlib import Path as p
 import numpy as np
 from queue import Queue, Full, Empty
-from threading import Thread
+from threading import Thread, Lock
 import subprocess
 import os
 from os.path import dirname
@@ -24,6 +24,7 @@ class Clip:
         self.bitrate = bitrate
         self.fps = fps
         self.suffix = f'_{tag.lower()}' if tag else ''
+        self.rmtree_lock = Lock()
         self.is_enable = enable 
         if not self.is_enable:
             logger.warning(f'[{self.tag}] Clip function is disabled !')
@@ -71,11 +72,12 @@ class Clip:
                 self.video_thread.join(5.)
 
         if is_interrupted:
-            date = get_now_str(time(), utc=False)[:8]
-            folder = p(self.root_dir) / date
-            for path in folder.glob('*'):
-                if path.is_dir():
-                    shutil.rmtree(path)
+            with self.rmtree_lock:
+                date = get_now_str(time(), utc=False)[:8]
+                folder = p(self.root_dir) / date
+                for path in list(folder.glob('*')):
+                    if path.is_dir():
+                        shutil.rmtree(path)
 
         self._reset()
 
@@ -202,12 +204,13 @@ class Clip:
         except:
             logger.error(traceback.format_exc())
         finally:
-            if save_dir and save_dir.exists():
-                shutil.rmtree(save_dir)
-                logger.warning(f'[{tag}] deleted the {save_dir}')
-            if not save_video and csv_path.exists():
-                csv_path.unlink()
-                logger.warning(f'[{tag}] deleted the {csv_path}')
+            with self.rmtree_lock:
+                if save_dir and save_dir.exists():
+                    shutil.rmtree(save_dir)
+                    logger.warning(f'[{tag}] deleted the {save_dir}')
+                if not save_video and csv_path.exists():
+                    csv_path.unlink()
+                    logger.warning(f'[{tag}] deleted the {csv_path}')
 
     def _calc_fps_from_filenames(self, tag, frames, default_fps=30.0):
         """根據資料夾內第一張和最後一張圖片的檔名(時間戳)推算平均 fps。"""
