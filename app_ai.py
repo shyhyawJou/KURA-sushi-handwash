@@ -419,3 +419,6 @@ if __name__ == "__main__":
         # 退出程式
         if exit_program:
             break
+
+    app.exit_program = True
+    app.stop()
