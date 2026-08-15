@@ -283,5 +283,6 @@ if __name__ == "__main__":
     except:
         logger.error(traceback.format_exc())
     finally:
+        app.exit_program = True
         app.stop()
         logger.success('Application terminated !')
