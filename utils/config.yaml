@@ -47,9 +47,8 @@ AI:
                     #- 'interlaced fingers'
                     - 'thumb or wrist scrub'
                     - 'scrub under nails'
-                    - 'handwash'
                     - 'wipe hands with tissue'
-                    - 'UV sterilization'
+                    #- 'UV sterilization'
                     - 'spray alcohol'
                 iou_thresh: 0.4
             #- 
