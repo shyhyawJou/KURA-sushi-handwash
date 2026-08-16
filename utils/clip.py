@@ -32,7 +32,6 @@ class Clip:
 
     def write_frame(self, frame, timestamp):
         if not self.is_enable:
-            logger.warning(f'[{self.tag}] function is disabled !')
             return
 
         try:
@@ -42,7 +41,6 @@ class Clip:
     
     def start(self):
         if not self.is_enable:
-            logger.warning(f'[{self.tag}] function is disabled !')
             return
         if self.is_running:
             logger.error(f'[{self.tag}] thread is not stopped, ignored to start a new thread !')
@@ -54,7 +52,6 @@ class Clip:
 
     def stop(self, save_video, is_interrupted=False):
         if not self.is_enable:
-            logger.warning(f'[{self.tag}] function is disabled !')
             return
         self.is_running = False
         if self.frame_thread:
