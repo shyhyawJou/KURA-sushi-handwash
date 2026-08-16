@@ -163,13 +163,13 @@ video:
 # suffix 可能會在某些物件初始化的時候給值
 clip:
     origin:
-        root_dir: 'log/record/clip'
+        root_dir: '/mnt/reserved/record/clip'
         enable: true
         crf: 18
         bitrate: 2.5
         fps: 30
     result:
-        root_dir: 'log/record/clip'
+        root_dir: '/mnt/reserved/record/clip'
         enable: true
         crf: 23
         bitrate: 1
