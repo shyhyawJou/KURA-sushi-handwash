@@ -43,11 +43,11 @@ AI:
                     - 'handwash'
                     - 'trigger soap dispenser'
                     #- 'palm to palm'
-                    - 'palm over back'
+                    #- 'palm over back'
                     #- 'interlaced fingers'
-                    - 'thumb or wrist scrub'
-                    - 'scrub under nails'
-                    - 'wipe hands with tissue'
+                    #- 'thumb or wrist scrub'
+                    #- 'scrub under nails'
+                    #- 'wipe hands with tissue'
                     #- 'UV sterilization'
                     - 'spray alcohol'
                 iou_thresh: 0.01
@@ -124,13 +124,13 @@ clip:
         root_dir: 'log/record/clip'
         enable: true
         crf: 18
-        bitrate: 2.5
+        bitrate: 3
         fps: 30
     result:
         root_dir: 'log/record/clip'
         enable: true
         crf: 23
-        bitrate: 1
+        bitrate: 2
         fps: 30
 
 visualization:
@@ -225,9 +225,9 @@ logic:
             2: [2]
             3: [3]
             4: [4]
-            5: [5]
+            5: [3, 5]
             6: [6]
-            7: [7]
+            7: [7, 9]
             8: [8]
             9: [9]
             10: [10]
