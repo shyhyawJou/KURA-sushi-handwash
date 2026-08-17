@@ -334,8 +334,9 @@ def get_sort_key(path_obj):
 
 
 if __name__ == "__main__":
-    FOLDER = 'video'
+    #FOLDER = 'video'
     #FOLDER = 'videos_for_report'
+    FOLDER = 'clips/0793'
 
     for folder in sorted(p(FOLDER).glob('*')):
         if not folder.is_dir():
@@ -346,10 +347,12 @@ if __name__ == "__main__":
         #    continue
         #if folder.name != '20260709':
         #    continue
-        if folder.name != '20260806':
-            continue
+        #if folder.name != '20260806':
+        #    continue
         #if folder.name != 'demo_gg':
         #    continue
+        if folder.name != '20260817':
+            continue
 
         # flag
         exit_program = False
@@ -379,6 +382,11 @@ if __name__ == "__main__":
         for path in paths:
             try:
                 if 'result' in path.stem:
+                    continue
+                if path.stem not in {
+                    '20260817 111338.644_left_origin', 
+                    #'20260817 145623.107_right_origin'
+                }:
                     continue
 
                 # 更新待讀取的影片
