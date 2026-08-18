@@ -332,7 +332,6 @@ class HandWashTracker:
                           int(self.is_detecting_steps[step_id]))
         self.saved_steps.append(step_id)
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
-        logger.debug(f'[{self.zone_name}] last step in sequence: {self.steps[-1]}')
 
     def _get_final_data(self):
         if len(self.steps) == 0:
