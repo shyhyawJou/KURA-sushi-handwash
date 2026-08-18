@@ -24,9 +24,11 @@ AI:
         #path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17_fp16.dla'
         #path: 'best_0.9460_0.8540_epoch_23_kura_spray_alcohol_v19_fp1.dla'
         #path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20_fp16.dla'
-        path: 'best_0.9110_0.7850_epoch_17_kura_handwash_v2_fp16.dla'
+        #path: 'best_0.9110_0.7850_epoch_17_kura_handwash_v2_fp16.dla'
+        path: 'best_0.9100_0.7800_epoch_19_kura_handwash_v3_fp16.dla'
         #score_threshs: [0.8, 0.75, 0.9, 0.7, 0.2, 0.35, 0.65, 0.65, 0.25, 0.95, 0.75, 0.7, 0.6]  # kura_handwash_v1
-        score_threshs: [0.9, 0.9, 0.95, 0.25, 0.05, 0.3, 0.75, 0.7, 0.35, 0.95, 0.85, 0.9, 0.2]
+        #score_threshs: [0.9, 0.9, 0.95, 0.25, 0.05, 0.3, 0.75, 0.7, 0.35, 0.95, 0.85, 0.9, 0.2]
+        score_threshs: [0.95, 0.95, 0.95, 0.1, 0.05, 0.2, 0.65, 0.6, 0.55, 0.95, 0.8, 0.95, 0.55]
         iou_thresh: 0.01
         input_wh: [448, 448]
 
