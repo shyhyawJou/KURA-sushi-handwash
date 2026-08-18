@@ -224,7 +224,7 @@ class HandWashTracker:
         
         scrub_hand_mask = np.isin(detections['label'], self.label_scrub_hand)
         
-        # 有做洗手動作或兩手有交集都算有效
+        # 有做洗手動作
         if len(hands) > 0 and np.any(scrub_hand_mask):
             self._do_step(12)
         #elif len(hands) >= 2:
@@ -232,7 +232,7 @@ class HandWashTracker:
         #    np.fill_diagonal(ious, 0)
         #    if np.any(ious >= self.cfg['scrub_overlap_thresh']):
         #        self._do_step(12)
-        else:
+        elif self.detecting_step != 12:  # 如果正在檢測 step12, 允許累加
             self._undo_step(12)
         
     def _do_step(self, step_id):
