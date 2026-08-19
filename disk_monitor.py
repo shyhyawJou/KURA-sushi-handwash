@@ -41,23 +41,23 @@ def custom_cleanup_logic():
     base_path = Path(BIG_FILE_DIR)
     
     if not (base_path.exists() and base_path.is_dir()):
-        print(f"Directory {BIG_FILE_DIR} not found.")
+        logger.warning(f"Directory {BIG_FILE_DIR} not found.")
         return
 
     # 1. 取得當前剩餘空間與計算目標缺口
     current_free = get_free_space()
     if current_free is None:
-        print("Failed to get disk space.")
+        logger.error("Failed to get disk space.")
         return
         
     # 計算還需要多少空間才達標 (Bytes)
     needed_size = THRESHOLD_BYTES - current_free
     
     if needed_size <= 0:
-        print(f"Space already sufficient. Free: {current_free / (1024**3):.2f} GB")
+        logger.info(f"Space already sufficient. Free: {current_free / (1024**3):.2f} GB")
         return
 
-    print(f"Need to free up approximately: {needed_size / (1024**2):.2f} MB")
+    logger.info(f"Need to free up approximately: {needed_size / (1024**2):.2f} MB")
 
     # 2. 取得並按日期排序
     items = []
@@ -80,18 +80,18 @@ def custom_cleanup_logic():
                 file.unlink()
 
             accumulated_deleted_size += size
-            print(f"Deleted: {file.name} ({size / (1024**2):.2f} MB)")
+            logger.warning(f"Deleted: {file.name} ({size / (1024**2):.2f} MB)")
             
             # 判斷累積刪除量是否已達標
             if accumulated_deleted_size >= needed_size:
-                print(f"Target reached! Total freed: {accumulated_deleted_size / (1024**2):.2f} MB")
+                logger.success(f"Target reached! Total freed: {accumulated_deleted_size / (1024**2):.2f} MB")
                 break
                 
         except Exception as e:
             # 發生錯誤（如 Read-only）時，不累加大小並跳過
-            print(f"Failed to delete {file}: {e}")
+            logger.error(f"Failed to delete {file}: {e}")
             if "Read-only file system" in str(e):
-                print("Critical: Disk is Read-only. Aborting cleanup.")
+                logger.error("Critical: Disk is Read-only. Aborting cleanup.")
                 break
 
 
