@@ -246,7 +246,8 @@ class HandWashTracker:
             self.is_detecting_steps[step_id] = step_id == self.detecting_step
 
         # 滿足動作確認條件
-        if self.frames[step_id] == self.cfg['action_frame'][step_id]:
+        is_confirmed = self.step_confirmed[step_id]
+        if not is_confirmed and self.frames[step_id] >= self.cfg['action_frame'][step_id]:
             self.step_confirmed[step_id] = True
             self.step_confirmed_times[step_id] = self.now
             logger.debug(f'[{self.zone_name}] Step {step_id}: action confirmed !')
@@ -287,7 +288,7 @@ class HandWashTracker:
             self.idle_frames[step_id] += 1
 
             # reset
-            if self.idle_frames[step_id] == self.cfg['action_frame'][step_id] // 2:
+            if self.idle_frames[step_id] >= self.cfg['action_frame'][step_id] // 2:
                 # 儲存
                 if self.step_confirmed[step_id]:
                     self._update_record(step_id)
