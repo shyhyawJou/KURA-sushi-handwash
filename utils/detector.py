@@ -36,10 +36,10 @@ class RTMDet:
         logger.warning(f'每類的信心分數閥值: {self.score_threshs} (有先進行 max(conf - 0.2, 0.05))')
 
     def __call__(self, img):
-        x, scale = self._preprocess(img)
+        x, max_hw, scale = self._preprocess(img)
         y = self._forward(x)
         boxes, scores = np.split(y, [4], 1)
-        boxes = self._distance2bbox(boxes)
+        boxes = self._distance2bbox(boxes, max_hw)
         scores, boxes, pred_labels = self._postprocess(scores, boxes, scale)
         return scores, boxes, pred_labels
 
@@ -62,7 +62,7 @@ class RTMDet:
             x = x.transpose(2, 0, 1)[None].astype('float32')
         else:
             x = x[None].astype('float32')
-        return x, scale
+        return x, (new_h, new_w), scale
 
     def _postprocess(self, scores, boxes, scale):
         boxes, scores = boxes[0].T, scores[0].T
@@ -105,7 +105,7 @@ class RTMDet:
         grids = np.concatenate(grids, 0) 
         return grids
 
-    def _distance2bbox(self, distance):
+    def _distance2bbox(self, distance, max_hw):
         distance = distance.reshape(4, -1).transpose(1, 0)
 
         assert self.grids.shape[0] == distance.shape[0], f'{self.grids.shape}, {distance.shape}'
@@ -113,7 +113,6 @@ class RTMDet:
         assert distance.shape[-1] == 4
 
         points = self.grids
-        max_shape = self.input_wh[::-1]
 
         x1 = points[..., 0] - distance[..., 0]
         y1 = points[..., 1] - distance[..., 1]
@@ -123,11 +122,9 @@ class RTMDet:
         bboxes = np.stack([x1, y1, x2, y2], -1)
         bboxes = bboxes.transpose(1, 0).reshape(1, 4, -1)
 
-        if max_shape is not None:
-            # speed up
-            bboxes[:, 0::2].clip(min=0, max=max_shape[1])
-            bboxes[:, 1::2].clip(min=0, max=max_shape[0])
-            return bboxes
+        # speed up
+        bboxes[:, 0::2] = bboxes[:, 0::2].clip(min=0, max=max_hw[1])
+        bboxes[:, 1::2] = bboxes[:, 1::2].clip(min=0, max=max_hw[0])
 
         return bboxes
 
