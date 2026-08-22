@@ -1,7 +1,6 @@
 import numpy as np
-from numpy.linalg import norm as np_norm
-from time import time, sleep
-from threading import Event
+from time import time
+from queue import Queue
 from loguru import logger
 from .tool import get_iou, get_now_str, get_utc_offset
 from .step import Step_History, MyDict
@@ -43,6 +42,7 @@ class HandWashTracker:
         # mqtt
         self.mqtt = mqtt
         self.pub_period = 1. / pub_freq
+        self.cmd_queue = Queue()
 
         # 初始化
         self.reset()
@@ -98,8 +98,13 @@ class HandWashTracker:
                     f'Detecting step become: {self.detecting_step} !')
 
     def update(self, detections, frame, now):
+        # 時間戳
         self.now = now
-        
+
+        # 處理 mqtt cmd
+        self._drain_events()
+
+        # reset variables
         export_data = None
         self.sent_msg = None
         self.saved_steps = []
@@ -219,7 +224,7 @@ class HandWashTracker:
 
     def _check_step12(self, detections, hands):
         # 忽略不是剛噴完酒精
-        if len(self.steps) == 0 or self.steps[-1].id != 11:
+        if len(self.steps) == 0 or (self.steps[-1].id != 11 and self.detecting_step != 12):
             return
         
         scrub_hand_mask = np.isin(detections['label'], self.label_scrub_hand)
@@ -537,36 +542,52 @@ class HandWashTracker:
         logger.success(f'[{self.zone_name}] Detecting step switched, {old} -> {self.detecting_step} !')
 
     def switch_step_callback(self, cmd):
-        self.is_switch_step = True
-        self.next_step = int(cmd['step_id'].replace('Step', ''))
+        self.cmd_queue.put(('switch_step', cmd))
 
     def login_callback(self, cmd):
-        self.is_login = True
-        self.user_name = cmd['user']
-        self.user_id = cmd['id']
-        self.has_hand_start_time = None
-        self.no_hand_start_time = None
-        self.pub_no_hand = False
-        self.pub_no_hand_zero = False
-        logger.info(f'[{self.zone_name}] UI became login, '
-                    f'[User ID]: {self.user_id}, '
-                    f'[User Name]: {self.user_name} !')
-        self.origin_clip.start()
-        self.result_clip.start()
-        self.login_time = get_now_str(self.now, utc=True)
+        self.cmd_queue.put(('login', cmd))
 
     def logout_callback(self, cmd):
-        logger.warning(f'[{self.zone_name}] UI became logout !')
+        self.cmd_queue.put(('logout', cmd))
 
     def switch_login_mode_callback(self, cmd):
-        if cmd['mode'] not in self.valid_login_modes:
-            logger.error(f'[{self.zone_name}] Invaild login mode: {cmd["mode"]}')
-            return
+        self.cmd_queue.put(('switch_login_mode', cmd))
 
-        if self.login_mode == cmd['mode']:
-            logger.warning(f'[{self.zone_name}] login mode is the same as original, '
-                           f'ignored the command !')
-        else:
-            logger.warning(f'[{self.zone_name}] login mode became {cmd["mode"]}, '
-                           f'original mode is {self.login_mode} !')
-            self.login_mode = cmd['mode']
+    def _drain_events(self):
+        while not self.cmd_queue.empty():
+            kind, cmd = self.cmd_queue.get_nowait()
+
+            if kind == 'switch_step':
+                self.is_switch_step = True
+                self.next_step = int(cmd['step_id'].replace('Step', ''))
+
+            elif kind == 'login':
+                self.is_login = True
+                self.user_name = cmd['user']
+                self.user_id = cmd['id']
+                self.has_hand_start_time = None
+                self.no_hand_start_time = None
+                self.pub_no_hand = False
+                self.pub_no_hand_zero = False
+                logger.info(f'[{self.zone_name}] UI became login, '
+                            f'[User ID]: {self.user_id}, '
+                            f'[User Name]: {self.user_name} !')
+                self.origin_clip.start()
+                self.result_clip.start()
+                self.login_time = get_now_str(self.now, utc=True)
+
+            elif kind == 'logout':
+                logger.warning(f'[{self.zone_name}] UI became logout !')
+
+            elif kind == 'switch_login_mode':
+                if cmd['mode'] not in self.valid_login_modes:
+                    logger.error(f'[{self.zone_name}] Invaild login mode: {cmd["mode"]}')
+                    return
+
+                if self.login_mode == cmd['mode']:
+                    logger.warning(f'[{self.zone_name}] login mode is the same as original, '
+                                f'ignored the command !')
+                else:
+                    logger.warning(f'[{self.zone_name}] login mode became {cmd["mode"]}, '
+                                f'original mode is {self.login_mode} !')
+                    self.login_mode = cmd['mode']
