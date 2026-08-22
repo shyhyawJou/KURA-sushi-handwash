@@ -1,9 +1,9 @@
 set -euo pipefail
 
 DATA_DIR='kurasushi_handwash'
-SERVICES=(kurasushi_handwash.service disk_monitor.service usb_autocopy.service)
+SERVICES=(kurasushi_handwash.service disk_monitor.service)
 
-unzip -o ~/${DATA_DIR}.zip -d /mnt/reserved
+unzip -o ${DATA_DIR}.zip -d /mnt/reserved
 
 pip3 install \
     opencv-python \
@@ -42,5 +42,5 @@ grep ERROR -aE /mnt/reserved/log/$(date +%Y%m%d)-*.log || true
 printf "\n********************************* disk_monitor log *********************************\n"
 tail -n 20 /mnt/reserved/disk_monitor.log
 
-printf "\n********************************* usb_autocopy log *********************************\n"
-tail -n 20 /mnt/reserved/usb_autocopy.log
+#printf "\n********************************* usb_autocopy log *********************************\n"
+#tail -n 20 /mnt/reserved/usb_autocopy.log

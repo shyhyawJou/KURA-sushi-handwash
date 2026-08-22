@@ -38,8 +38,10 @@ AI:
         #path: 'best_0.9070_0.7650_epoch_30_kura_handwash_v1.onnx'
         #path: 'best_0.9110_0.7850_epoch_17_kura_handwash_v2.onnx'
         #score_threshs: [0.8, 0.75, 0.9, 0.7, 0.2, 0.35, 0.65, 0.65, 0.25, 0.95, 0.75, 0.7, 0.6]  # kura_handwash_v1
-        path: 'best_0.9140_0.7930_epoch_23_kura_handwash_v4.onnx'
-        score_threshs: [0.95, 0.65, 0.9, 0.5, 0.25, 0.45, 0.7, 0.7, 0.35, 0.9, 0.8, 0.95, 0.5]
+        path: 'best_0.9050_0.8000_epoch_15_kura_handwash_v7.onnx'
+        #score_threshs: [0.95, 0.65, 0.9, 0.5, 0.25, 0.45, 0.7, 0.7, 0.35, 0.9, 0.8, 0.95, 0.5]
+        #score_threshs: [0.95, 0.85, 0.75, 0.7, 0.15, 0.75, 0.6, 0.6, 0.35, 0.85, 0.85, 0.95, 0.75]
+        score_threshs: [0.95, 0.95, 0.85, 0.5, 0.6, 0.75, 0.65, 0.55, 0.35, 0.95, 0.8, 0.85, 0.8]
         iou_thresh: 0.01
         input_wh: [448, 448]
 
@@ -145,13 +147,13 @@ clip:
         root_dir: 'log/record/clip'
         enable: false
         crf: 18
-        bitrate: 2.5
+        bitrate: 3
         fps: 30
     result:
         root_dir: 'log/record/clip'
         enable: false
         crf: 23
-        bitrate: 1
+        bitrate: 2
         fps: 30
 
 visualization:
@@ -248,7 +250,7 @@ logic:
             4: [4]
             5: [3, 5]
             6: [6]
-            7: [7, 9]
+            7: [7]
             8: [8]
             9: [9]
             10: [10]
