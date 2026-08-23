@@ -10,7 +10,8 @@ pip3 install \
     numpy \
     uvicorn \
     fastapi \
-    loguru
+    loguru \
+    ntplib
 
 cd /mnt/reserved/${DATA_DIR}
 
