@@ -168,17 +168,14 @@ class Clip:
             cmd = [
                 'ffmpeg', '-y',
                 '-f', 'concat', '-safe', '0',
+                '-nostdin',
                 '-i', str(list_path),
                 '-r', str(round(fps, 2)),
                 '-vsync', 'cfr',
                 '-pix_fmt', 'yuv420p',
-                '-c:v', 'h264_v4l2m2m',
-                '-b:v', f'{round(bitrate, 1)}M',           # 位元率
-                '-maxrate', f'{round(bitrate * 2, 1)}M',
-                '-bufsize', f'{round(bitrate * 4, 1)}M',
-                '-g', str(int(fps * 2)),         # gop
-                '-num_output_buffers', '32',
-                '-num_capture_buffers', '32',
+                '-c:v', 'libx264',
+                '-preset', 'fast',
+                '-crf', str(self.crf),
                 str(video_path),
             ]
             logger.info(f'ffmpeg command: {cmd}')
