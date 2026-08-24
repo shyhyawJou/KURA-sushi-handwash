@@ -168,6 +168,7 @@ class Clip:
             cmd = [
                 'ffmpeg', '-y',
                 '-f', 'concat', '-safe', '0',
+                '-nostdin',
                 '-i', str(list_path),
                 '-r', str(round(fps, 2)),
                 '-vsync', 'cfr',
