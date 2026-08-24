@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path as p
 import cv2
 from time import time
-from collections.abc import Sequence, Iterable
+from collections.abc import Sequence
 from loguru import logger
 
 
@@ -36,10 +36,11 @@ class RTMDet:
         logger.warning(f'每類的信心分數閥值: {self.score_threshs} (有先進行 max(conf - 0.2, 0.05))')
 
     def __call__(self, img):
-        x, max_hw, scale = self._preprocess(img)
+        x, scale = self._preprocess(img)
         y = self._forward(x)
         boxes, scores = np.split(y, [4], 1)
-        boxes = self._distance2bbox(boxes, max_hw)
+        boxes, scores = boxes[0].T, scores[0].T
+        boxes = self._distance2bbox(boxes)
         scores, boxes, pred_labels = self._postprocess(scores, boxes, scale)
         return scores, boxes, pred_labels
 
@@ -62,31 +63,34 @@ class RTMDet:
             x = x.transpose(2, 0, 1)[None].astype('float32')
         else:
             x = x[None].astype('float32')
-        return x, (new_h, new_w), scale
+        return x, scale
 
     def _postprocess(self, scores, boxes, scale):
-        boxes, scores = boxes[0].T, scores[0].T
-        scores, pred_labels = scores.max(1), scores.argmax(1)
+        # multi-label
+        wh = boxes[:, 2:4] - boxes[:, 0:2]
+        mask = (scores >= self.score_threshs[None]) & (wh > 0).all()
+        box_idxs, pred_labels = np.nonzero(mask)
+        scores = scores[box_idxs, pred_labels]
+        boxes = boxes[box_idxs]
 
-        ids = scores >= self.score_threshs[pred_labels]
-        scores, boxes, pred_labels = scores[ids], boxes[ids], pred_labels[ids]
+        # box for nms
         boxes_nms = boxes.copy()
-        boxes_nms[:, 2:4] -= boxes[:, 0:2]
+        boxes_nms[:, 2:4] -= boxes_nms[:, 0:2]
 
         # 分組無類別 NMS 的 labels
         OFFSET_WH = 4096
         adjusted_labels = pred_labels.copy()
-        
-        # 無類別 NMS
+
         if self.agnostic_nms_labels:
             for group in self.agnostic_nms_labels:
                 target_label = group[0]
                 mask = np.isin(adjusted_labels, group)
                 adjusted_labels[mask] = target_label
-            
+
+        # nms
         offset = (adjusted_labels * OFFSET_WH).astype('float32')
         boxes_nms[:, 0] += offset
-        ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0, self.iou_thresh)
+        ids = cv2.dnn.NMSBoxes(boxes_nms, scores, 0., self.iou_thresh)
 
         if len(ids) > 0:
             scores, boxes, pred_labels = scores[ids], boxes[ids], pred_labels[ids]
@@ -105,24 +109,21 @@ class RTMDet:
         grids = np.concatenate(grids, 0) 
         return grids
 
-    def _distance2bbox(self, distance, max_hw):
-        distance = distance.reshape(4, -1).transpose(1, 0)
-
+    def _distance2bbox(self, distance):
         assert self.grids.shape[0] == distance.shape[0], f'{self.grids.shape}, {distance.shape}'
         assert self.grids.shape[-1] == 2
         assert distance.shape[-1] == 4
 
         points = self.grids
-
         x1 = points[..., 0] - distance[..., 0]
         y1 = points[..., 1] - distance[..., 1]
         x2 = points[..., 0] + distance[..., 2]
         y2 = points[..., 1] + distance[..., 3]
 
-        bboxes = np.stack([x1, y1, x2, y2], -1)
-        bboxes = bboxes.transpose(1, 0).reshape(1, 4, -1)
+        bboxes = np.stack([x1, y1, x2, y2], -1)  # (n, 4)
 
         # speed up
+        max_hw = self.input_wh[::-1]
         bboxes[:, 0::2] = bboxes[:, 0::2].clip(min=0, max=max_hw[1])
         bboxes[:, 1::2] = bboxes[:, 1::2].clip(min=0, max=max_hw[0])
 
@@ -150,10 +151,29 @@ class RTMDet:
         assert isinstance(self.agnostic_nms, Sequence) and len(self.agnostic_nms) > 0
         labels = [[classes.index(cls) for cls in group['class']] for group in self.agnostic_nms]
         return labels
+
+
+class RTMDet_PT(RTMDet):
+    def __init__(self, path, score_threshs, iou_thresh, input_wh, classes, agnostic_nms=None):
+        self.device = 'cuda'
+        super().__init__(path, score_threshs, iou_thresh, input_wh, classes, agnostic_nms)
+        self.is_onnx = True
+
+    def _forward(self, x):
+        import torch
+        with torch.no_grad():
+            x = torch.from_numpy(x).to(self.device)
+            y = self.model(x).cpu().numpy()
+        return y
     
+    def _load_model(self, path):
+        import torch
+        self.model = torch.load(path, self.device, weights_only=False)
+        self.model.eval()
+
 
 class RTMDet_ONNX(RTMDet):
-    def _forward(self, x):
+    def _forward(self, x, path=None):
         y = self.model.run(None, {self.input_name: x})[0]
         return y
     
