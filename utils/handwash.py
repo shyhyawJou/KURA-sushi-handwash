@@ -165,8 +165,7 @@ class HandWashTracker:
 
             if self.pub_no_hand_zero:
                 self.is_login = False
-                self.is_final = True
-                self.finish_reason = 'No hand'
+                self._become_final('No hand')
         # 觸發 AI 自動登入
         elif not self.is_login and self.login_mode == 'hand':
             if len(hands) > 0:
@@ -371,8 +370,8 @@ class HandWashTracker:
     def _finalize_session(self, is_interrupted):
         """ 結束 Session 並回傳資料 """
         # finish reason
-        if self.finish_reason is None:  # 被 kill
-            self.finish_reason = 'killed'
+        if is_interrupted:  # 被 kill
+            self._become_final('killed')
 
         final_data = self._get_final_data()
         n_step = len(self.steps)
@@ -438,8 +437,7 @@ class HandWashTracker:
                     self.pub_no_hand = False
                 elif cmd == 'status':
                     if self.detecting_step == 12 and msg['trigger']:
-                        self.is_final = True
-                        self.finish_reason = 'all completed'
+                        self._become_final('all completed')
 
             # 控制發送頻率
             if cmd == 'status':
@@ -553,6 +551,10 @@ class HandWashTracker:
     def switch_login_mode_callback(self, cmd):
         self.cmd_queue.put(('switch_login_mode', cmd))
 
+    def _become_final(self, reason):
+        self.is_final = True
+        self.finish_reason = reason
+
     def _drain_events(self):
         while not self.cmd_queue.empty():
             kind, cmd = self.cmd_queue.get_nowait()
@@ -578,6 +580,8 @@ class HandWashTracker:
 
             elif kind == 'logout':
                 logger.warning(f'[{self.zone_name}] UI became logout !')
+                if not self.is_final:  # 特別設計讓 UI logout 的觸發較不優先
+                    self._become_final('UI')
 
             elif kind == 'switch_login_mode':
                 if cmd['mode'] not in self.valid_login_modes:
