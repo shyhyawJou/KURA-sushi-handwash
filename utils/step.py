@@ -92,7 +92,23 @@ class Step_History:
 
     def __len__(self):
         return len(self.ids)
-    
+
+    def sort_by_start_time(self):
+        """ 依照 start_time 排序所有已記錄的步驟 """
+        if len(self.ids) < 2:
+            return
+
+        order = sorted(range(len(self.start_times)), key=lambda i: self.start_times[i])
+
+        self.ids = [self.ids[i] for i in order]
+        self.counts = [self.counts[i] for i in order]
+        self.start_times = [self.start_times[i] for i in order]
+        self.end_times = [self.end_times[i] for i in order]
+        self.step_confirmed_times = [self.step_confirmed_times[i] for i in order]
+        self.durations = [self.durations[i] for i in order]
+        self.frames = [self.frames[i] for i in order]
+        self.is_detecting_steps = [self.is_detecting_steps[i] for i in order]
+
 
 class MyDict(MutableMapping):
     """ 線程安全 """
