@@ -312,7 +312,7 @@ class HandWashTracker:
         is_confirmed = self.step_confirmed[step_id]
         confirmed_time = self.step_confirmed_times[step_id]
         if is_confirmed and confirmed_time != self.now:
-            delta_t = max(self.now - self.last_start_times[step_id], 0)
+            delta_t = max(self.now - self.last_start_times[step_id], 1e-6)
         else:
             delta_t = 0
         self.durations[step_id] += delta_t
