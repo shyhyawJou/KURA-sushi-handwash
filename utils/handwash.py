@@ -568,6 +568,8 @@ class HandWashTracker:
 
             elif kind == 'login':
                 self.is_login = True
+                self.is_final = False
+                self.finish_reason = None
                 self.user_name = cmd['user']
                 self.user_id = cmd['id']
                 self.has_hand_start_time = None
@@ -584,7 +586,8 @@ class HandWashTracker:
             elif kind == 'logout':
                 logger.warning(f'[{self.zone_name}] UI became logout !')
                 if not self.is_final:  # 特別設計讓 UI logout 的觸發較不優先
-                    self._become_final('UI')
+                    #self._become_final('UI')
+                    pass
 
             elif kind == 'switch_login_mode':
                 if cmd['mode'] not in self.valid_login_modes:
