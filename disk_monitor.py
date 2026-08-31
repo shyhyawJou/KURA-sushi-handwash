@@ -66,7 +66,7 @@ def custom_cleanup_logic():
             items.append((f, get_dir_size(f)))
         else:
             items.append((f, get_file_size(f)))
-    
+
     items.sort(key=lambda x: x[0].stem)
 
     # 3. 進入刪除迴圈，累加刪除量
