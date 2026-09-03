@@ -269,7 +269,7 @@ logic:
             8: 10
             9: 10
             10: 10
-            11: 10
+            11: 5
             12: 10
         init_step_num: 1
         alarm_frame: 10  # 連續滿足才 alarm
