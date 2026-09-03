@@ -42,7 +42,6 @@ class HandWashTracker:
         # mqtt
         self.mqtt = mqtt
         self.pub_period = 1. / pub_freq
-        self.cmd_queue = Queue()
 
         # 初始化
         self.reset()
@@ -69,6 +68,7 @@ class HandWashTracker:
         self.pub_no_hand_zero = False
         self.saved_steps = []
         self.is_final = False  # 重置訊號
+        self.is_paused = False  # 完成 12 步驟後, 等待 UI 回到首頁後發出通知
         self.login_time = None
         
         # 使用者資訊
@@ -91,6 +91,7 @@ class HandWashTracker:
         self.is_detecting_steps = MyDict({i: False for i in range(1, 13)})
         self.is_switch_step = False
         self.next_step = None
+        self.cmd_queue = Queue()
 
         # debug info
         self._update_debug_info()
@@ -103,6 +104,10 @@ class HandWashTracker:
 
         # 處理 mqtt cmd
         self._drain_events()
+
+        # 如果在 paused 狀態下, 不進行檢測
+        if self.is_paused:
+            return
 
         # reset variables
         export_data = None
@@ -181,7 +186,7 @@ class HandWashTracker:
                 self.has_hand_start_time = None
 
         # 即時狀態和錄影
-        if self.is_login:
+        if self.is_login and not self.is_final:
             self._publish_status(self.mqtt.pub_topics['process'], 'status', fatal=False)
 
         # 更新 debug 資料
@@ -435,7 +440,8 @@ class HandWashTracker:
                     self.pub_no_hand = False
                 elif cmd == 'status':
                     if self.detecting_step == 12 and msg['trigger']:
-                        self._become_final('all completed')
+                        logger.info('handwashing completed, waiting for the UI to return to the homepage...')
+                        self.cmd_queue.put(('completed', None))
 
             # 控制發送頻率
             if cmd == 'status':
@@ -533,6 +539,7 @@ class HandWashTracker:
 
     def _become_final(self, reason):
         self.is_final = True
+        self.is_paused = False
         self.finish_reason = reason
 
     def _drain_events(self):
@@ -562,9 +569,10 @@ class HandWashTracker:
 
             elif kind == 'logout':
                 logger.warning(f'[{self.zone_name}] UI became logout !')
-                if not self.is_final:  # 特別設計讓 UI logout 的觸發較不優先
-                    #self._become_final('UI')
-                    pass
+                self._become_final('all completed')
+
+            elif kind == 'completed':
+                self.is_paused = True
 
             elif kind == 'switch_login_mode':
                 if cmd['mode'] not in self.valid_login_modes:

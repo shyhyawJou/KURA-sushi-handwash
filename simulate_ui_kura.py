@@ -2,6 +2,7 @@ import json
 import paho.mqtt.client as mqtt
 from dataclasses import dataclass
 from loguru import logger
+from time import sleep
 
 BROKER     = "localhost"
 PORT       = 1883
@@ -32,6 +33,7 @@ def make_command(side: str, current_id: int, next_id: int) -> dict:
     如果當前是第 12 步，則發送 Logout 指令。
     """
     if current_id == 12:
+        sleep(0.5)
         return {"cmd": "Logout", "side": side}
     
     return {"cmd": "NextStep", "step_id": f"Step{next_id}", "side": side}
@@ -66,7 +68,7 @@ def on_connect(client, userdata, flags, rc):
 def handle_reset(client, data: dict):
     """
     處理 Reset 指令。
-    若 time == 0，視為逾時，對該 side 發送 Logout 並重置狀態。
+    若 time == 0，視為逾時
     """
     side = data.get("side", "")
     if side not in states:
@@ -77,11 +79,6 @@ def handle_reset(client, data: dict):
     logger.info(f"[RECV] Reset side={side} remain={remain}")
 
     if remain == 0:
-        logger.warning(f"[{side}] Reset timeout (time=0), triggering Logout")
-        cmd     = {"cmd": "Logout", "side": side}
-        payload = json.dumps(cmd)
-        client.publish(TOPIC_SEND, payload)
-        logger.info(f"[SEND] topic={TOPIC_SEND} payload={payload}")
         states[side] = StepState()   # 重置狀態回第一步
 
 def on_message(client, userdata, msg):
