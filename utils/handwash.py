@@ -231,11 +231,6 @@ class HandWashTracker:
         # 有做洗手動作
         if len(hands) > 0 and np.any(scrub_hand_mask):
             self._do_step(12)
-        #elif len(hands) >= 2:
-        #    ious = get_iou(hands, hands)
-        #    np.fill_diagonal(ious, 0)
-        #    if np.any(ious >= self.cfg['scrub_overlap_thresh']):
-        #        self._do_step(12)
         elif self.detecting_step != 12:  # 如果正在檢測 step12, 允許累加
             self._undo_step(12)
         
@@ -506,27 +501,9 @@ class HandWashTracker:
             pending.append(step_id)
 
         # 依 end time 排序後寫入
-        #pending.sort(key=lambda sid: self.end_times[sid])
         for step_id in pending:
             self._update_record(step_id)
 
-        # 最後的洗手步驟如果是 "檢測中的步驟", 有可能真實順序不是最後一個
-        #if len(self.steps) >= 2:
-        #    last_step = self.steps[-1]
-        #    idx = None
-#
-        #    if last_step.is_detecting_step:
-        #        for i in range(1, len(self.steps)):
-        #            if self.steps[i-1].start_time <= last_step.start_time <= self.steps[i].start_time:
-        #                idx = i
-        #                break
-        #        if idx and idx != len(self.steps) - 1:
-        #            ori_steps = self.steps.ids.copy()
-        #            self.steps.pop()
-        #            self.steps.insert(last_step, idx)
-        #            new_steps = self.steps.ids
-        #            logger.success(f'alerted the order of washing step, origin: {ori_steps}, alerted: {new_steps} !')
-            
         # 輸出最終結果
         export_data = self._finalize_session(is_interrupted)
         logger.warning(f'[{self.zone_name}] Session stop because of "{self.finish_reason}" !')
