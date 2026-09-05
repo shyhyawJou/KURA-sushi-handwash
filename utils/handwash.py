@@ -105,15 +105,15 @@ class HandWashTracker:
         # 處理 mqtt cmd
         self._drain_events()
 
-        # 如果在 paused 狀態下, 不進行檢測
-        if self.is_paused:
-            return
-
         # reset variables
         export_data = None
         self.sent_msg = None
         self.saved_steps = []
         pub_hand_delay = self.time_cfg['pub_hand_delay']
+
+        # 如果在 paused 狀態下, 不進行檢測
+        if self.is_paused:
+            return
 
         # 手
         hand_mask = np.isin(detections['label'], self.label_bare_hand + self.label_gloved_hand)
@@ -339,7 +339,7 @@ class HandWashTracker:
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
 
     def _get_final_data(self):
-        if len(self.steps) == 0:
+        if len(self.steps) == 0 and (self.login_mode == 'hand' or self.user_id is None):
             return {}
 
         # sort
@@ -378,14 +378,16 @@ class HandWashTracker:
 
         final_data = self._get_final_data()
         n_step = len(self.steps)
-        if n_step == 0:
-            logger.debug(f'[{self.zone_name}] Completed with no any step! Skip to save CSV !')
-        else:
-            logger.info(f'[{self.zone_name}] Completed with {n_step} steps! ')
+        #if n_step == 0:
+        #    logger.debug(f'[{self.zone_name}] Completed with no any step! Skip to save CSV !')
+        #else:
+        #    logger.info(f'[{self.zone_name}] Completed with {n_step} steps! ')
+        logger.info(f'[{self.zone_name}] Completed with {n_step} steps! ')
 
         # clip
-        self.origin_clip.stop(n_step != 0, is_interrupted)
-        self.result_clip.stop(n_step != 0, is_interrupted)
+        save_video = n_step != 0 or (self.login_mode == 'scanner' and self.user_id is not None)
+        self.origin_clip.stop(save_video, is_interrupted)
+        self.result_clip.stop(save_video, is_interrupted)
         return final_data
 
     def _update_debug_info(self, hands=[]):
@@ -482,9 +484,7 @@ class HandWashTracker:
 
     def stop(self, is_interrupted=False):
         """
-        強制停止當前 session。
-        把當下所有 step_confirmed 但尚未寫入 self.steps 的步驟，
-        依 start_time 排序後補入 self.steps，再執行 finalize。
+        強制停止當前 session, 只寫入 step_confirmed 的步驟
         """
         # 收集所有「已確認但尚未寫入」的步驟
         pending = []
