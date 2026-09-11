@@ -6,11 +6,13 @@ from .tool import get_iou, get_now_str, get_utc_offset, parse_lateral_flags
 from .step import Step_History, MyDict
 from .clip import Clip
 from .cfg import CFG
+from .hand_presence import HandPresenceGate
 
 
 
 class HandWashTracker:
-    def __init__(self, zone_name, logic_cfg, sys_cfg, ai_class, mqtt = None, pub_freq=10):
+    def __init__(self, zone_name, logic_cfg, sys_cfg, ai_class, mqtt=None, pub_freq=10,
+                 hand_trigger_logger=None):
         # config
         self.cfg = logic_cfg['handwash_parameter']
         self.time_cfg = logic_cfg['time_parameter']
@@ -18,6 +20,9 @@ class HandWashTracker:
         self.login_mode = logic_cfg['login'][sys_cfg['TriggerMode']]
         self.valid_login_modes = set(logic_cfg['login'].values())
         logger.warning(f'[{zone_name}] current login mode is "{self.login_mode}"')
+
+        # 手觸發登入/登出的時間記錄器 (跟主要洗手紀錄 CSV 完全分開, 沒給就不記錄)
+        self.hand_trigger_logger = hand_trigger_logger
 
         # check config
         assert self.cfg['alarm_frame'] > 0
@@ -63,13 +68,19 @@ class HandWashTracker:
         #self.is_alarm = False
         #self.multi_step_frame = 0
         self.sent_msg = None
-        self.no_hand_elapsed = -1
-        self.has_hand_elapsed = -1
-        self.no_hand_start_time = None
-        self.has_hand_start_time = None
-        self.pub_no_hand = False
-        self.pub_no_hand_zero = False
         self.saved_steps = []
+
+        # 登入狀態機
+        self.login_gate = HandPresenceGate(
+            self.time_cfg['pub_hand_delay'],
+            exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
+        )
+
+        # 手計數狀態機:
+        self.hand_trigger_gate = HandPresenceGate(
+            self.time_cfg['pub_hand_delay'],
+            exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
+        )
         self.is_final = False  # 重置訊號
         self.is_paused = False  # 完成 12 步驟後, 等待 UI 回到首頁後發出通知
         self.login_time = None
@@ -123,7 +134,6 @@ class HandWashTracker:
         export_data = None
         self.sent_msg = None
         self.saved_steps = []
-        pub_hand_delay = self.time_cfg['pub_hand_delay']
 
         # 如果在 paused 狀態下, 不進行檢測
         if self.is_paused:
@@ -132,6 +142,15 @@ class HandWashTracker:
         # 手
         hand_mask = np.isin(detections['label'], self.label_bare_hand + self.label_gloved_hand)
         hands = detections['box'][hand_mask]
+        has_hand = len(hands) > 0
+
+        # 手觸發登入/登出時間記錄: 跟真正的登入狀態無關, 只是借用同一套去彈跳規則
+        self.hand_trigger_gate.update(self.now, has_hand)
+        if self.hand_trigger_logger is not None:
+            if self.hand_trigger_gate.entered:
+                self.hand_trigger_logger.log(self.zone_name.lower(), 'Login', get_now_str(self.now, utc=True))
+            if self.hand_trigger_gate.exited:
+                self.hand_trigger_logger.log(self.zone_name.lower(), 'Logout', get_now_str(self.now, utc=True))
 
         # scanner 模式下且沒登入
         if self.login_mode == 'scanner' and not self.is_login:
@@ -167,37 +186,27 @@ class HandWashTracker:
 
         # 觸發登出
         if self.is_login:
-            has_hand = len(hands) > 0
-            if self.pub_no_hand:  # 倒數中
-                if not has_hand:
-                    self.has_hand_start_time = None
-                if self.now - self._get_has_hand_start_time() >= pub_hand_delay:
-                    self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
-                    self.has_hand_start_time = None
-                    self.no_hand_start_time = None
-            elif has_hand:        # 沒有在倒數
-                self.no_hand_start_time = None
+            self.login_gate.update(self.now, has_hand)
 
-            self.no_hand_elapsed = self.now - self._get_no_hand_start_time()
-            if self.no_hand_elapsed >= pub_hand_delay:
-                self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=not self.pub_no_hand)
+            if self.login_gate.exit_cancelled:
+                self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
 
-            if self.pub_no_hand_zero:
+            if self.login_gate.exiting or self.login_gate.exited:
+                self._publish_status(self.mqtt.pub_topics['system'], 'Reset',
+                                     fatal=self.login_gate.exit_started)
+
+            if self.login_gate.exited:
                 self.is_login = False
                 self._become_final('No hand')
         # 觸發 AI 自動登入
-        elif not self.is_login and self.login_mode == 'hand':
-            if len(hands) > 0:
-                if self.now - self._get_has_hand_start_time() >= pub_hand_delay:
-                    self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
-                    self.is_login = True
-                    self.has_hand_start_time = None
-                    self.no_hand_start_time = None
-                    self.login_time = get_now_str(self.now, utc=True)
-                    self.origin_clip.start()
-                    self.result_clip.start()
-            else:
-                self.has_hand_start_time = None
+        elif self.login_mode == 'hand':
+            self.login_gate.update(self.now, has_hand)
+            if self.login_gate.entered:
+                self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
+                self.is_login = True
+                self.login_time = get_now_str(self.now, utc=True)
+                self.origin_clip.start()
+                self.result_clip.start()
 
         # 即時狀態和錄影
         if self.is_login and not self.is_final:
@@ -347,16 +356,6 @@ class HandWashTracker:
         self._bucket(step_id, self.durations, self.left_durations, self.right_durations)[step_id] += delta_t
         self.last_start_times[step_id] = self.now
 
-    def _get_has_hand_start_time(self):
-        if self.has_hand_start_time is None:
-            self.has_hand_start_time = self.now
-        return self.has_hand_start_time
-
-    def _get_no_hand_start_time(self):
-        if self.no_hand_start_time is None:
-            self.no_hand_start_time = self.now
-        return self.no_hand_start_time
-
     def _select(self, side, base, left, right):
         """依 side ('left' / 'right' / None) 選出對應要操作的字典"""
         if side == 'left':
@@ -490,13 +489,7 @@ class HandWashTracker:
             
             # 有發送訊息
             if self.sent_msg is not None:
-                if cmd == 'Reset':
-                    self.pub_no_hand = True
-                    if float(msg['time']) == 0:
-                        self.pub_no_hand_zero = True
-                elif cmd == 'ResetCancel':
-                    self.pub_no_hand = False
-                elif cmd == 'status':
+                if cmd == 'status':
                     if self.detecting_step == 12 and msg['trigger']:
                         logger.info('handwashing completed, waiting for the UI to return to the homepage...')
                         self.cmd_queue.put(('completed', None))
@@ -507,10 +500,7 @@ class HandWashTracker:
 
     def _create_mqtt_message(self, cmd):
         if cmd == 'Reset':
-            timeout = self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']
-            delay = self.time_cfg['pub_hand_delay']
-            remain = max(timeout - max(self.no_hand_elapsed - delay, 0), 0)
-            msgs = {"cmd": cmd, "side": self.zone_name.lower(), "time": str(remain)}
+            msgs = {"cmd": cmd, "side": self.zone_name.lower(), "time": str(self.login_gate.remain)}
         elif cmd == 'ResetCancel':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'BackLogin':  # 12 步驟 reset
@@ -619,10 +609,7 @@ class HandWashTracker:
                 self.finish_reason = None
                 self.user_name = cmd['user']
                 self.user_id = cmd['id']
-                self.has_hand_start_time = None
-                self.no_hand_start_time = None
-                self.pub_no_hand = False
-                self.pub_no_hand_zero = False
+                self.login_gate.force_active(True)
                 logger.info(f'[{self.zone_name}] UI became login, '
                             f'[User ID]: {self.user_id}, '
                             f'[User Name]: {self.user_name} !')

@@ -95,6 +95,10 @@ csv:
     save_dir: 'log/csv'
     output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
 
+csv_hand_trigger:
+    save_dir: 'log/csv_hand_trigger'
+    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+
 video:
     # 原始影片
     origin: 
@@ -113,7 +117,7 @@ video:
 
     # 結果影片
     result:
-        enable: false  # 要不要啟動錄影 (不管其他參數)
+        enable: true  # 要不要啟動錄影 (不管其他參數)
         base_dir: log/record/stream
         frame_w: 640
         frame_h: 480
@@ -151,7 +155,7 @@ clip:
         fps: 30
     result:
         root_dir: 'log/record/clip'
-        enable: true
+        enable: false
         crf: 23
         bitrate: 2
         fps: 30
@@ -282,7 +286,7 @@ mqtt:
         - 'NextStep'
         - 'Trigger'
     qos: 0
-    pub_freq: 10
+    pub_freq: 5
 
 roi:
     screen: [0.33240997, 0.08704062, 0.69637119, 0.3001354]
