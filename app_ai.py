@@ -20,6 +20,7 @@ from utils import (Mjpeg_Streamer,
                    setup_logger, MY_LOGGER,
                    Csv_Manager,
                    HandWashTracker,
+                   HandTriggerLogger,
                    draw_timestamp, draw_debug_panel, plot_bbox,
                    Timer,
                    MQTT,
@@ -29,6 +30,7 @@ from utils import (Mjpeg_Streamer,
 
 VIDEO_PATH = None
 VIDEO_FOLDER = None
+ENABLE_SIMULATE_UI = True
 
 
 class App_HandWash:
@@ -50,19 +52,22 @@ class App_HandWash:
         self.predict_video = Video(**CFG['video']['predict'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.mqtt_manager = MQTT(**CFG['mqtt'])
+        self.hand_trigger_logger = HandTriggerLogger(save_dir=CFG['csv_hand_trigger']['save_dir'])
 
         # 檢測洗手
         self.screen = np.asarray(CFG['roi']['screen'])
         self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, 
-                                            self.mqtt_manager, CFG['mqtt']['pub_freq'])
+                                            self.mqtt_manager, CFG['mqtt']['pub_freq'],
+                                            hand_trigger_logger=self.hand_trigger_logger)
         self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, 
-                                             self.mqtt_manager, CFG['mqtt']['pub_freq'])
+                                             self.mqtt_manager, CFG['mqtt']['pub_freq'],
+                                             hand_trigger_logger=self.hand_trigger_logger)
         self.is_left_login = False
         self.is_right_login = False
         self.is_ai_login = True
 
         # 重要標籤
-        self.wash_labels = [self.tracker_left.step_labels[i] for i in range(1, 12)]
+        self.wash_labels = self.tracker_left.step_labels_1d
         self.exit_program = False
 
         # mqtt callback
@@ -361,18 +366,20 @@ if __name__ == "__main__":
         VIDEO_FOLDER = folder
             
         # 啟動模擬器（非阻塞）
-        try:
-            sim_proc = subprocess.Popen(['python3', 'simulate_ui_kura.py'])
-        except OSError:
-            logger.error(f'啟動 simulate_ui_kura.py 失敗: {traceback.format_exc()} ! 影片目錄: {folder}')
-            raise
+        sim_proc = None
+        if ENABLE_SIMULATE_UI:
+            try:
+                sim_proc = subprocess.Popen(['python3', 'simulate_ui_kura.py'])
+            except OSError:
+                logger.error(f'啟動 simulate_ui_kura.py 失敗: {traceback.format_exc()} ! 影片目錄: {folder}')
+                raise
 
-        # 給它一點時間起來，確認沒有立刻掛掉
-        sleep(0.5)
-        if sim_proc.poll() is not None:
-            logger.error(f'simulate_ui_kura.py 啟動後立即結束，returncode={sim_proc.returncode} !')
-            raise RuntimeError(f'simulate_ui_kura.py exited immediately with returncode {sim_proc.returncode}')
-
+            # 給它一點時間起來，確認沒有立刻掛掉
+            sleep(0.5)
+            if sim_proc.poll() is not None:
+                logger.error(f'simulate_ui_kura.py 啟動後立即結束，returncode={sim_proc.returncode} !')
+                raise RuntimeError(f'simulate_ui_kura.py exited immediately with returncode {sim_proc.returncode}')
+    
         # 初始化主程式物件
         device_code = socket.gethostname().split('-')[-1]
         app = App_HandWash(device_code)
@@ -383,11 +390,6 @@ if __name__ == "__main__":
             try:
                 if 'result' in path.stem:
                     continue
-                #if path.stem not in {
-                #    '20260817 111338.644_left_origin', 
-                #    #'20260817 145623.107_right_origin'
-                #}:
-                #    continue
 
                 # 更新待讀取的影片
                 VIDEO_PATH = path
@@ -414,17 +416,18 @@ if __name__ == "__main__":
         app.stop()
         
         # 結束模擬器
-        sim_proc.terminate()
-        try:
-            sim_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            logger.warning('simulate_ui_kura.py 未在時限內結束，強制 kill !')
-            sim_proc.kill()
-            sim_proc.wait()
+        if ENABLE_SIMULATE_UI and sim_proc is not None:
+            sim_proc.terminate()
+            try:
+                sim_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logger.warning('simulate_ui_kura.py 未在時限內結束，強制 kill !')
+                sim_proc.kill()
+                sim_proc.wait()
 
-        if sim_proc.returncode not in (0, -15, -9):  # -15=SIGTERM, -9=SIGKILL 都算正常收尾
-            logger.error(f'simulate_ui_kura.py 異常結束，returncode={sim_proc.returncode} !')
-
+            if sim_proc.returncode not in (0, -15, -9):  # -15=SIGTERM, -9=SIGKILL 都算正常收尾
+                logger.error(f'simulate_ui_kura.py 異常結束，returncode={sim_proc.returncode} !')
+                
         # 退出程式
         if exit_program:
             break

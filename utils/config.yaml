@@ -40,64 +40,82 @@ AI:
         #score_threshs: [0.8, 0.75, 0.9, 0.7, 0.2, 0.35, 0.65, 0.65, 0.25, 0.95, 0.75, 0.7, 0.6]  # kura_handwash_v1
         #path: 'best_0.9050_0.8000_epoch_15_kura_handwash_v7.onnx'
         #path: 'best_0.9130_0.8080_epoch_18_kura_handwash_v10.onnx'
-        path: best_0.9150_0.8100_epoch_20_kura_handwash_v11.onnx
+        #path: best_0.9150_0.8100_epoch_20_kura_handwash_v11.onnx
+        path: best_0.9040_0.8110_epoch_16_kura_handwash_v15.onnx
         #score_threshs: [0.95, 0.65, 0.9, 0.5, 0.25, 0.45, 0.7, 0.7, 0.35, 0.9, 0.8, 0.95, 0.5]
         #score_threshs: [0.95, 0.85, 0.75, 0.7, 0.15, 0.75, 0.6, 0.6, 0.35, 0.85, 0.85, 0.95, 0.75]
         #score_threshs: [0.95, 0.95, 0.85, 0.5, 0.6, 0.75, 0.65, 0.55, 0.35, 0.95, 0.8, 0.85, 0.8]
         #score_threshs: [0.95, 0.5, 0.8, 0.5, 0.4, 0.5, 0.6, 0.5, 0.25, 0.85, 0.7, 0.85, 0.9]
         #score_threshs: [0.95, 0.4, 0.9, 0.65, 0.6, 0.4, 0.5, 0.5, 0.75, 0.85, 0.7, 0.85, 0.65]
-        score_threshs: [0.95, 0.25, 0.3, 0.35, 0.2, 0.35, 0.6, 0.5, 0.1, 0.95, 0.75, 0.85, 0.8]
+        #score_threshs: [0.95, 0.25, 0.3, 0.35, 0.2, 0.35, 0.6, 0.5, 0.1, 0.95, 0.75, 0.85, 0.8]
+        score_threshs: [0.95, 0.85, 0.95, 0.65, 0.95, 0.6, 0.4, 0.9, 0.6, 0.6, 0.7, 0.8, 0.25, 0.75, 0.6, 0.25]
         iou_thresh: 0.01
         input_wh: [448, 448]
 
         classes:
-            - 'palm to palm'
-            - 'palm over back'
-            - 'interlaced fingers'
-            - 'thumb or wrist scrub'
-            - 'scrub under nails'
-            - 'gloved hand'
-            - 'left'
-            - 'right'
-            - 'spray alcohol'
-            - 'trigger soap dispenser'
-            - 'wipe hands with tissue'
-            - 'handwash'
-            - 'UV sterilization'
+            - handwash
+            - trigger soap dispenser
+            - palm to palm
+            - left palm over back
+            - right palm over back
+            - interlaced fingers
+            - left thumb or wrist scrub
+            - right thumb or wrist scrub
+            - left scrub under nails
+            - right scrub under nails
+            - wipe hands with tissue
+            - UV sterilization
+            - spray alcohol
+            - left
+            - right
+            - gloved hand
         
         agnostic_nms: # null 是 disable
-            -
-                class:
-                    - 'handwash'
-                    - 'trigger soap dispenser'
-                    #- 'palm to palm'
-                    #- 'palm over back'
-                    #- 'interlaced fingers'
-                    #- 'thumb or wrist scrub'
-                    #- 'scrub under nails'
-                    #- 'wipe hands with tissue'
-                    #- 'UV sterilization'
-                    - 'spray alcohol'
-                iou_thresh: 0.01
-            #- 
+            #-
             #    class:
-            #        - 'left'
-            #        - 'right'
-            #    iou_thresh:
-            #        0.9
+            #        - 'handwash'
+            #        - 'trigger soap dispenser'
+            #        #- 'palm to palm'
+            #        #- 'palm over back'
+            #        #- 'interlaced fingers'
+            #        #- 'thumb or wrist scrub'
+            #        #- 'scrub under nails'
+            #        #- 'wipe hands with tissue'
+            #        #- 'UV sterilization'
+            #        - 'spray alcohol'
+            #    iou_thresh: 0.01
+            - 
+                class:
+                    - 'left palm over back'
+                    - 'right palm over back'
+                iou_thresh: 0.01
+            - 
+                class:
+                    - 'left thumb or wrist scrub'
+                    - 'right thumb or wrist scrub'
+                iou_thresh: 0.01
+            - 
+                class:
+                    - 'left scrub under nails'
+                    - 'right scrub under nails'
+                iou_thresh: 0.01
 
 device: 
     path: 'utils/device.yaml'
 
 log:
     folder: 'log'
-    level: INFO
+    level: TRACE
 
 throttled_logger:
     log_interval: 60
 
 csv:
     save_dir: 'log/csv'
+    output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
+
+csv_hand_trigger:
+    save_dir: 'log/csv_hand_trigger'
     output_path: null  # null 會自動產生路徑, 有指定的話檔名會加上後綴 "_result" 且會覆蓋同名檔
 
 video:
@@ -176,7 +194,7 @@ visualization:
             #- 'sink'
             #- 'soap dispenser'
         bbox_thickness: 2
-        plot_score: false
+        plot_score: true
         font_scale: 0.35
         font_thickness: 1
         text_padding: 1
@@ -211,17 +229,17 @@ logic:
     # 洗手相關參數
     handwash_parameter:
         step_name:
-            1: 'handwash'
-            2: 'trigger soap dispenser'
-            3: 'palm to palm'
-            4: 'palm over back'
-            5: 'interlaced fingers'
-            6: 'thumb or wrist scrub'
-            7: 'scrub under nails'
-            8: 'handwash'
-            9: 'wipe hands with tissue'
-            10: 'UV sterilization'
-            11: 'spray alcohol'
+            1: [handwash]
+            2: [trigger soap dispenser]
+            3: [palm to palm]
+            4: [left palm over back, right palm over back]
+            5: [interlaced fingers]
+            6: [left thumb or wrist scrub, right thumb or wrist scrub]
+            7: [left scrub under nails, right scrub under nails]
+            8: [handwash]
+            9: [wipe hands with tissue]
+            10: [UV sterilization]
+            11: [spray alcohol]
             12: null
 
         scrub_count_ratio:

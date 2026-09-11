@@ -21,7 +21,7 @@ class RTMDet:
         self.input_wh = input_wh
         self.agnostic_nms = agnostic_nms
         self.agnostic_nms_labels = self._create_agnostic_nms_labels(classes)
-        self.score_threshs = np.maximum(np.array(score_threshs) - 0.2, 0.05)
+        self.score_threshs = self._compute_confidence_score(score_threshs, agnostic_nms, classes)
         self.iou_thresh = iou_thresh            
         self.strides = [8, 16, 32]
         self.mean = np.asarray([103.53, 116.28, 123.675], 'float32')
@@ -33,7 +33,6 @@ class RTMDet:
         self._load_model(path)
         self._warmup()
         logger.success(f'load {self.path} !')
-        logger.warning(f'每類的信心分數閥值: {self.score_threshs} (有先進行 max(conf - 0.2, 0.05))')
 
     def __call__(self, img):
         x, scale = self._preprocess(img)
@@ -152,6 +151,21 @@ class RTMDet:
         labels = [[classes.index(cls) for cls in group['class']] for group in self.agnostic_nms]
         return labels
 
+    def _compute_confidence_score(self, confs, agnostic_nms, classes):
+        confs = np.maximum(np.array(confs) - 0.2, 0.05)
+        if agnostic_nms is not None:
+            for group in agnostic_nms:
+                info = []  # [(conf, cls_id), ...]
+                for c in group['class']:
+                    cls_id = classes.index(c)
+                    info.append((confs[cls_id], cls_id))
+
+                min_conf = min(info, key=lambda x : x[0])[0]
+                for conf, cls_id in info:
+                    confs[cls_id] = max(min_conf, 0.05)
+        logger.warning(f'每類的信心分數閥值: {confs.tolist()}')
+        return confs
+    
 
 class RTMDet_PT(RTMDet):
     def __init__(self, path, score_threshs, iou_thresh, input_wh, classes, agnostic_nms=None):
@@ -179,7 +193,7 @@ class RTMDet_ONNX(RTMDet):
     
     def _load_model(self, path):
         import onnxruntime as ort
-        providers = ['CUDAExecutionProvider']
+        providers = [('CUDAExecutionProvider', {'device_id': 1})]
         self.model = ort.InferenceSession(path, providers=providers)
         self.input_name = self.model.get_inputs()[0].name
 
@@ -368,4 +382,3 @@ class YOLOV9_ONNX:
         boxes[:, 0:2] = x0y0
         boxes[:, 2:4] = x1y1
         return boxes
-
