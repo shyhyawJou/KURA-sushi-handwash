@@ -1,58 +1,29 @@
 import cv2
+from .handwash import HandWashTracker
 
 
 
 COLORS = [
-    '5F5FF3',  # 藍紫
-    'F3A1EB',  # 粉紅
-    'FCFA98',  # 淡黃
-    '96DCF8',  # 淺藍
-    '00FF00',  # 亮綠
-    'FF0000',  # 純紅
-    'FFA500',  # 橘色
-    '800080',  # 紫色
-    '00FFFF',  # 青色 (Cyan)
-    'FFD700',  # 金黃
-    'DC143C',  # 猩紅
-    '00CED1',  # 深青綠
-    'ADFF2F',  # 黃綠
-    '1E90FF',  # 道奇藍
-    'FF69B4',  # 粉紅紅
-    '8B4513',  # 深棕
-    'A52A2A',  # 棕紅
-    'FF1493',  # 深粉紅
-    '7FFF00',  # 查特綠
-    '9932CC',  # 紫水晶
-    '40E0D0',  # 綠松石
-    'B22222',  # 火磚紅
-    '2E8B57',  # 海綠
-    'D2691E',  # 巧克力棕
-    'E6E6FA',  # 薰衣草紫
-    '0000FF',  # 純藍
-    '008000',  # 深綠
-    'FFFF00',  # 純黃
-    'FF00FF',  # 洋紅
-    '00FF7F',  # 春綠
-    '4682B4',  # 鋼藍
-    '6A5ACD',  # 石板藍
-    'C71585',  # 中紫紅
-    '191970',  # 午夜藍
-    '228B22',  # 森林綠
-    'B8860B',  # 深金
-    'FF4500',  # 橘紅
-    '2F4F4F',  # 深灰綠
-    '6495ED',  # 矢車菊藍
-    'FFB6C1',  # 淺粉紅
-    '20B2AA',  # 淺海綠
-    'CD5C5C',  # 印度紅
-    'BA55D3',  # 中蘭花紫
-    '3CB371',  # 中海綠
-    'DB7093',  # 淺紫紅
-    '87CEEB',  # 天空藍
-    '6B8E23',  # 橄欖綠
-    'FF8C00',  # 深橘
-    '483D8B',  # 深石板藍
-    '708090'  # 石板灰
+    "4242BF",  # 紅色系
+    "00F200",  # 綠色
+    "F20000",  # 藍色
+    "F2DA00",  # 青色
+    "24C9F2",  # 橙黃色
+    "C100F2",  # 洋紅色
+    "BF5D1C",  # 藍紫色
+    "6DBF1C",  # 黃綠色
+    "0000F2",  # 紅色(深)
+    "F25493",  # 粉藍色
+    "00BF85",  # 黃綠(暗)
+    "7900F2",  # 紫紅色
+    "428DBF",  # 橙棕色
+    "0079F2",  # 橙色
+    "BF8D42",  # 藍棕色
+    "9942BF",  # 紫色
+    "D2F254",  # 青綠色
+    "F200DA",  # 粉紫色
+    "26BF00",  # 綠色(亮)
+    "00F2DA",  # 黃綠(亮)
 ]
 
 
@@ -196,7 +167,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
         # 繪製主文字
         cv2.putText(image, text, org, font, size, color, thickness, cv2.LINE_AA)
 
-    def draw_zone_debug(tracker, start_x):
+    def draw_zone_debug(tracker: HandWashTracker, start_x):
         d = tracker.debug_info
         cfg = tracker.cfg
         sys_cfg = tracker.sys_cfg
@@ -226,8 +197,47 @@ def draw_debug_panel(img, tracker_l, tracker_r):
 
         # 步驟狀態
         for i in range(1, 13):
-            is_done = i in steps
-            is_active = d['frames'][i] > 0
+            recorded = steps.get(i)
+
+            if recorded is not None:
+                frame = recorded.frame
+                left_frame = recorded.left_frame
+                right_frame = recorded.right_frame
+                duration = recorded.duration
+                left_duration = recorded.left_duration
+                right_duration = recorded.right_duration
+                count = recorded.count
+                left_count = recorded.left_count
+                right_count = recorded.right_count
+            else:
+                frame = d['frames'][i]
+                left_frame = d['left_frames'][i]
+                right_frame = d['right_frames'][i]
+                duration = d['durations'][i]
+                left_duration = d['left_durations'][i]
+                right_duration = d['right_durations'][i]
+                count = d['counts'][i]
+                left_count = d['left_counts'][i]
+                right_count = d['right_counts'][i]
+
+            # 重要資訊
+            min_frame = cfg['action_frame'][i]
+            min_duration = sys_cfg[i-1]['washtimemax']
+            min_count = sys_cfg[i-1]['washcountmax']
+
+            if tracker.time_need_lr[i]:
+                time_ok = left_duration >= min_duration and right_duration >= min_duration
+            else:
+                time_ok = duration >= min_duration
+
+            if tracker.count_need_lr[i]:
+                count_ok = left_count >= min_count and right_count >= min_count
+            else:
+                count_ok = count >= min_count
+
+            is_done = time_ok and count_ok and recorded is not None
+            # 分左右的 step 進行中動的是 left_frame/right_frame, frame 本身不會動, 三個都要檢查
+            is_active = (frame > 0 or left_frame > 0 or right_frame > 0) and not is_done
             is_detecting = i == d['detecting_step']
             
             # 文字, 背景
@@ -248,23 +258,9 @@ def draw_debug_panel(img, tracker_l, tracker_r):
                 text_color = (255, 255, 255)  # 綠字
                 suffix = ""
 
-            # 重要資訊
-            min_frame = cfg['action_frame'][i]
-            min_duration = sys_cfg[i-1]['washtimemax']
-            min_count = sys_cfg[i-1]['washcountmax']
-
-            if is_done:
-                frame = steps[i].frame
-                duration = steps[i].duration
-                count = steps[i].count
-            else:
-                frame = d['frames'][i]
-                duration = d['durations'][i]
-                count = d['counts'][i]
-
-            frame_info = f'{frame:02d}/{min_frame}'
-            count_info = f'  {count}/{min_count}/{scr[i]}'
-            duration_info = f'  {duration:.2f}/{min_duration:.2f}'
+            frame_info = f'{frame},{left_frame},{right_frame}/{min_frame}'
+            count_info = f'  {count},{left_count},{right_count}/{min_count}/{scr[i]}'
+            duration_info = f'  {duration:.1f},{left_duration:.1f},{right_duration:.1f}/{min_duration:.1f}'
             line_text = f"Step {i:<2}: {frame_info}{count_info}{duration_info}  {suffix}"
             
             # y 座標隨 panel_height 自動計算，讓列表貼合底部

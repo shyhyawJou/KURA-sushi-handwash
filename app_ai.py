@@ -20,6 +20,7 @@ from utils import (Mjpeg_Streamer,
                    setup_logger, MY_LOGGER,
                    Csv_Manager,
                    HandWashTracker,
+                   HandTriggerLogger,
                    draw_timestamp, draw_debug_panel, plot_bbox,
                    Timer,
                    MQTT,
@@ -42,19 +43,22 @@ class App_HandWash:
         self.predict_video = Video(**CFG['video']['predict'])
         self.csv_manager = Csv_Manager(**CFG['csv'])
         self.mqtt_manager = MQTT(**CFG['mqtt'])
+        self.hand_trigger_logger = HandTriggerLogger(save_dir=CFG['csv_hand_trigger']['save_dir'])
 
         # 檢測洗手
         self.screen = np.asarray(CFG['roi']['screen'])
         self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, 
-                                            self.mqtt_manager, CFG['mqtt']['pub_freq'])
+                                            self.mqtt_manager, CFG['mqtt']['pub_freq'],
+                                            hand_trigger_logger=self.hand_trigger_logger)
         self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, 
-                                             self.mqtt_manager, CFG['mqtt']['pub_freq'])
+                                             self.mqtt_manager, CFG['mqtt']['pub_freq'],
+                                             hand_trigger_logger=self.hand_trigger_logger)
         self.is_left_login = False
         self.is_right_login = False
         self.is_ai_login = True
 
         # 重要標籤
-        self.wash_labels = [self.tracker_left.step_labels[i] for i in range(1, 12)]
+        self.wash_labels = self.tracker_left.step_labels_1d
         self.exit_program = False
 
         # mqtt callback

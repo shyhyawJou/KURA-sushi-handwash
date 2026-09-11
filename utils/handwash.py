@@ -2,15 +2,17 @@ import numpy as np
 from time import time
 from queue import Queue
 from loguru import logger
-from .tool import get_iou, get_now_str, get_utc_offset
+from .tool import get_iou, get_now_str, get_utc_offset, parse_lateral_flags
 from .step import Step_History, MyDict
 from .clip import Clip
 from .cfg import CFG
+from .hand_presence import HandPresenceGate
 
 
 
 class HandWashTracker:
-    def __init__(self, zone_name, logic_cfg, sys_cfg, ai_class, mqtt = None, pub_freq=10):
+    def __init__(self, zone_name, logic_cfg, sys_cfg, ai_class, mqtt=None, pub_freq=10,
+                 hand_trigger_logger=None):
         # config
         self.cfg = logic_cfg['handwash_parameter']
         self.time_cfg = logic_cfg['time_parameter']
@@ -18,6 +20,9 @@ class HandWashTracker:
         self.login_mode = logic_cfg['login'][sys_cfg['TriggerMode']]
         self.valid_login_modes = set(logic_cfg['login'].values())
         logger.warning(f'[{zone_name}] current login mode is "{self.login_mode}"')
+
+        # 手觸發登入/登出的時間記錄器 (跟主要洗手紀錄 CSV 完全分開, 沒給就不記錄)
+        self.hand_trigger_logger = hand_trigger_logger
 
         # check config
         assert self.cfg['alarm_frame'] > 0
@@ -27,17 +32,18 @@ class HandWashTracker:
         self.ai_classes = ai_class
         self.label_bare_hand = [ai_class.index(n) for n in logic_cfg['class']['hand']]
         self.label_gloved_hand = [ai_class.index(n) for n in logic_cfg['class']['gloved hand']]
-        self.label_scrub_hand = [ai_class.index(self.cfg['step_name'][i]) 
-                                 for i, cfg in enumerate(self.sys_cfg, 1) 
-                                 if cfg['washcountmax'] > 0]
-        self.step_labels = {i: ai_class.index(name) for i, name in self.cfg['step_name'].items() 
-                            if name in ai_class}
+        self.label_scrub_hand = [ai_class.index(name)
+                                 for i, cfg in enumerate(self.sys_cfg, 1) if cfg['washcountmax'] > 0
+                                 for name in self.cfg['step_name'][i]]
+        self.step_labels = {i: [ai_class.index(name) for name in (names or []) if name in ai_class] 
+                            for i, names in self.cfg['step_name'].items()}
+        self.step_labels_1d = [l for labels in self.step_labels.values() for l in labels]
         self.srcub_steps = {i for i, cfg in enumerate(self.sys_cfg, 1) if cfg['washcountmax'] > 0}
-        self.step_group = {step: [self.step_labels[i] for i in group] 
-                           for step, group in self.cfg['step_group'].items()}
         assert self.srcub_steps == self.cfg['scrub_count_ratio'].keys()
         self.scrub_count_ratio = {i: (self.cfg['scrub_count_ratio'][i] if i in self.srcub_steps else -1) 
                                   for i in range(1, 13)}
+        self.count_need_lr, self.time_need_lr = parse_lateral_flags(self.sys_cfg)
+        assert len(self.step_labels) == len(self.count_need_lr), f'{len(self.step_labels), len(self.count_need_lr)}'
 
         # mqtt
         self.mqtt = mqtt
@@ -50,6 +56,8 @@ class HandWashTracker:
         self.origin_clip = Clip(**CFG['clip']['origin'], tag=f'{self.zone_name}_Origin')
         self.result_clip = Clip(**CFG['clip']['result'], tag=f'{self.zone_name}_Result')
 
+        logger.debug(f'step labels: {self.step_labels}')
+
     def reset(self):
         self.now = time()       
         self.finish_reason = None
@@ -60,13 +68,19 @@ class HandWashTracker:
         #self.is_alarm = False
         #self.multi_step_frame = 0
         self.sent_msg = None
-        self.no_hand_elapsed = -1
-        self.has_hand_elapsed = -1
-        self.no_hand_start_time = None
-        self.has_hand_start_time = None
-        self.pub_no_hand = False
-        self.pub_no_hand_zero = False
         self.saved_steps = []
+
+        # 登入狀態機
+        self.login_gate = HandPresenceGate(
+            self.time_cfg['pub_hand_delay'],
+            exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
+        )
+
+        # 手計數狀態機:
+        self.hand_trigger_gate = HandPresenceGate(
+            self.time_cfg['pub_hand_delay'],
+            exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
+        )
         self.is_final = False  # 重置訊號
         self.is_paused = False  # 完成 12 步驟後, 等待 UI 回到首頁後發出通知
         self.login_time = None
@@ -79,16 +93,27 @@ class HandWashTracker:
         self.steps = Step_History()
 
         # 當下洗手資訊
-        self.frames = MyDict({i: 0 for i in range(1, 13)})
-        self.idle_frames = MyDict({i: 0 for i in range(1, 13)})
-        self.counts = MyDict({i: 0 for i in range(1, 13)})
-        self.start_times = MyDict({i: None for i in range(1, 13)})
-        self.step_confirmed_times = MyDict({i: None for i in range(1, 13)})
-        self.end_times = MyDict({i: None for i in range(1, 13)})
-        self.step_confirmed = MyDict({i: False for i in range(1, 13)})
-        self.last_start_times = MyDict({i: None for i in range(1, 13)})
-        self.durations = MyDict({i: 0 for i in range(1, 13)})
-        self.is_detecting_steps = MyDict({i: False for i in range(1, 13)})
+        new_dict = lambda value=0: MyDict({i: value for i in range(1, 13)})
+        self.frames = new_dict()
+        self.left_frames = new_dict()
+        self.right_frames = new_dict()
+        self.idle_frames = new_dict()
+        # ----------------------------------------------------------------------------
+        self.counts = new_dict()
+        self.left_counts = new_dict()
+        self.right_counts = new_dict()
+        self.categories = new_dict(None)
+        # ----------------------------------------------------------------------------
+        self.start_times = new_dict(None)
+        self.step_confirmed_times = new_dict(None)
+        self.end_times = new_dict(None)
+        self.last_start_times = new_dict(None)
+        self.durations = new_dict()
+        self.left_durations = new_dict()
+        self.right_durations = new_dict()
+        self.step_confirmed = new_dict(False)
+        # ----------------------------------------------------------------------------
+        self.is_detecting_steps = new_dict(False)
         self.is_switch_step = False
         self.next_step = None
         self.cmd_queue = Queue()
@@ -109,7 +134,6 @@ class HandWashTracker:
         export_data = None
         self.sent_msg = None
         self.saved_steps = []
-        pub_hand_delay = self.time_cfg['pub_hand_delay']
 
         # 如果在 paused 狀態下, 不進行檢測
         if self.is_paused:
@@ -118,6 +142,15 @@ class HandWashTracker:
         # 手
         hand_mask = np.isin(detections['label'], self.label_bare_hand + self.label_gloved_hand)
         hands = detections['box'][hand_mask]
+        has_hand = len(hands) > 0
+
+        # 手觸發登入/登出時間記錄: 跟真正的登入狀態無關, 只是借用同一套去彈跳規則
+        self.hand_trigger_gate.update(self.now, has_hand)
+        if self.hand_trigger_logger is not None:
+            if self.hand_trigger_gate.entered:
+                self.hand_trigger_logger.log(self.zone_name.lower(), 'Login', get_now_str(self.now, utc=True))
+            if self.hand_trigger_gate.exited:
+                self.hand_trigger_logger.log(self.zone_name.lower(), 'Logout', get_now_str(self.now, utc=True))
 
         # scanner 模式下且沒登入
         if self.login_mode == 'scanner' and not self.is_login:
@@ -153,37 +186,27 @@ class HandWashTracker:
 
         # 觸發登出
         if self.is_login:
-            has_hand = len(hands) > 0
-            if self.pub_no_hand:  # 倒數中
-                if not has_hand:
-                    self.has_hand_start_time = None
-                if self.now - self._get_has_hand_start_time() >= pub_hand_delay:
-                    self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
-                    self.has_hand_start_time = None
-                    self.no_hand_start_time = None
-            elif has_hand:        # 沒有在倒數
-                self.no_hand_start_time = None
+            self.login_gate.update(self.now, has_hand)
 
-            self.no_hand_elapsed = self.now - self._get_no_hand_start_time()
-            if self.no_hand_elapsed >= pub_hand_delay:
-                self._publish_status(self.mqtt.pub_topics['system'], 'Reset', fatal=not self.pub_no_hand)
+            if self.login_gate.exit_cancelled:
+                self._publish_status(self.mqtt.pub_topics['system'], 'ResetCancel', fatal=True)
 
-            if self.pub_no_hand_zero:
+            if self.login_gate.exiting or self.login_gate.exited:
+                self._publish_status(self.mqtt.pub_topics['system'], 'Reset',
+                                     fatal=self.login_gate.exit_started)
+
+            if self.login_gate.exited:
                 self.is_login = False
                 self._become_final('No hand')
         # 觸發 AI 自動登入
-        elif not self.is_login and self.login_mode == 'hand':
-            if len(hands) > 0:
-                if self.now - self._get_has_hand_start_time() >= pub_hand_delay:
-                    self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
-                    self.is_login = True
-                    self.has_hand_start_time = None
-                    self.no_hand_start_time = None
-                    self.login_time = get_now_str(self.now, utc=True)
-                    self.origin_clip.start()
-                    self.result_clip.start()
-            else:
-                self.has_hand_start_time = None
+        elif self.login_mode == 'hand':
+            self.login_gate.update(self.now, has_hand)
+            if self.login_gate.entered:
+                self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
+                self.is_login = True
+                self.login_time = get_now_str(self.now, utc=True)
+                self.origin_clip.start()
+                self.result_clip.start()
 
         # 即時狀態和錄影
         if self.is_login and not self.is_final:
@@ -205,7 +228,7 @@ class HandWashTracker:
         return export_data
 
     def _check_step1_to_11(self, detections, hands):
-        mask = np.isin(detections['label'], list(self.step_labels.values()))
+        mask = np.isin(detections['label'], self.step_labels_1d)
         step_boxes = detections['box'][mask]
         step_labels = detections['label'][mask]
 
@@ -214,15 +237,17 @@ class HandWashTracker:
             if i == (1 if self.detecting_step > 2 else 8):  # 做完肥皂後的洗手視為 step8
                 continue
 
-            # 如果是檢測中的步驟, 觸發條件較寬鬆
-            if i == self.detecting_step:
-                mask = np.isin(step_labels, self.step_group[i])  # 有些步驟視為相同
-            else:
-                mask = step_labels == self.step_labels[i]
+            mask = np.isin(step_labels, self.step_labels[i])
+
+            # 是否要區分左右
+            if np.any(mask) and (self.time_need_lr[i] or self.count_need_lr[i]):
+                category = self.ai_classes[step_labels[mask][0]].split()[0]
+                assert category in {'left', 'right'}, f'{category}, {self.ai_classes[step_labels[mask][0]]}'
+                self.categories[i] = category
 
             if len(hands) > 0 and np.any(mask):
                 self._do_step(i)
-                self._do_scrub_count(i)
+                self._do_scrub_count(i, self.categories[i])
             else:
                 self._undo_step(i)
 
@@ -240,18 +265,23 @@ class HandWashTracker:
             self._undo_step(12)
         
     def _do_step(self, step_id):
-        self.frames[step_id] += 1
+        self._bucket(step_id, self.frames, self.left_frames, self.right_frames)[step_id] += 1
         self.end_times[step_id] = self.now
         self.idle_frames[step_id] = 0
 
+        left_frame = self.left_frames[step_id]
+        right_frame = self.right_frames[step_id]
+        frame = self.frames[step_id]
+
         # 第一次
-        if self.frames[step_id] == 1:
+        if frame + left_frame + right_frame == 1:
             self.start_times[step_id] = self.now
             self.is_detecting_steps[step_id] = step_id == self.detecting_step
 
         # 滿足動作確認條件
         is_confirmed = self.step_confirmed[step_id]
-        if not is_confirmed and self.frames[step_id] >= self.cfg['action_frame'][step_id]:
+        action_frame = self.cfg['action_frame'][step_id]
+        if not is_confirmed and frame + left_frame + right_frame >= action_frame:
             self.step_confirmed[step_id] = True
             self.step_confirmed_times[step_id] = self.now
             logger.debug(f'[{self.zone_name}] Step {step_id}: action confirmed !')
@@ -265,7 +295,11 @@ class HandWashTracker:
 
     def _undo_step(self, step_id, force=False):        
         # 跳過不處理
-        if self.frames[step_id] == 0:
+        frame = self.frames[step_id]
+        left_frame = self.left_frames[step_id]
+        right_frame = self.right_frames[step_id]
+        
+        if frame == 0 and left_frame == 0 and right_frame == 0:
             self.last_start_times[step_id] = None
             return
 
@@ -273,7 +307,7 @@ class HandWashTracker:
         if step_id == self.detecting_step and self.step_confirmed[step_id]:
             self.idle_frames[step_id] += 1
             if self.idle_frames[step_id] <= self.cfg['valid_idle_frame']:
-                self.frames[step_id] += 1
+                self._bucket(step_id, self.frames, self.left_frames, self.right_frames)[step_id] += 1
                 self.end_times[step_id] = self.now
                 self._compute_step_duration(step_id)
             else:
@@ -300,11 +334,14 @@ class HandWashTracker:
                 # reset
                 self.reset_step_info(step_id)
 
-    def _do_scrub_count(self, step_id):
+    def _do_scrub_count(self, step_id, side=None):
         if step_id not in self.srcub_steps:
             return
-        frame = max(self.frames[step_id] - self.cfg['action_frame'][step_id], 0)
-        self.counts[step_id] = frame // self.scrub_count_ratio[step_id]
+
+        frame_dict = self._select(side, self.frames, self.left_frames, self.right_frames)
+        count_dict = self._select(side, self.counts, self.left_counts, self.right_counts)
+        frame = max(frame_dict[step_id] - self.cfg['action_frame'][step_id], 0)
+        count_dict[step_id] = frame // self.scrub_count_ratio[step_id]
 
     def _compute_step_duration(self, step_id):
         if self.last_start_times[step_id] is None:
@@ -315,25 +352,34 @@ class HandWashTracker:
             delta_t = max(self.now - self.last_start_times[step_id], 1e-6)
         else:
             delta_t = 0
-        self.durations[step_id] += delta_t
+
+        self._bucket(step_id, self.durations, self.left_durations, self.right_durations)[step_id] += delta_t
         self.last_start_times[step_id] = self.now
 
-    def _get_has_hand_start_time(self):
-        if self.has_hand_start_time is None:
-            self.has_hand_start_time = self.now
-        return self.has_hand_start_time
+    def _select(self, side, base, left, right):
+        """依 side ('left' / 'right' / None) 選出對應要操作的字典"""
+        if side == 'left':
+            return left
+        elif side == 'right':
+            return right
+        elif side is None:
+            return base
+        else:
+            raise ValueError(f'[{self.zone_name}] unknown side: {side}')
 
-    def _get_no_hand_start_time(self):
-        if self.no_hand_start_time is None:
-            self.no_hand_start_time = self.now
-        return self.no_hand_start_time
-    
+    def _bucket(self, step_id, base, left, right):
+        """依 self.categories[step_id] 選出該 step 目前要操作的字典"""
+        return self._select(self.categories[step_id], base, left, right)
+
     def _update_record(self, step_id):
         if not self.step_confirmed[step_id]:
             return
-        self.steps.append(step_id, self.counts[step_id], self.start_times[step_id], 
+        self.steps.append(step_id, self.counts[step_id], self.left_counts[step_id], 
+                          self.right_counts[step_id], self.start_times[step_id], 
                           self.end_times[step_id], self.step_confirmed_times[step_id], 
-                          self.durations[step_id], self.frames[step_id], 
+                          self.durations[step_id], self.left_durations[step_id],
+                          self.right_durations[step_id], self.frames[step_id], 
+                          self.left_frames[step_id], self.right_frames[step_id],
                           int(self.is_detecting_steps[step_id]))
         self.saved_steps.append(step_id)
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
@@ -358,9 +404,15 @@ class HandWashTracker:
             "Action Confirmed Time": [get_now_str(t) for t in self.steps.step_confirmed_times], 
             "End Time": [get_now_str(t) for t in self.steps.end_times],
             "Step Count": self.steps.counts.copy(),
+            "Left Step Count": self.steps.left_counts.copy(),
+            "Right Step Count": self.steps.right_counts.copy(),
             "Is Detecting Step": self.steps.is_detecting_steps.copy(),
             'Duration': self.steps.durations.copy(),
+            'Left Duration': self.steps.left_durations.copy(),
+            'Right Duration': self.steps.right_durations.copy(),
             'Frame': self.steps.frames.copy(),
+            'Left Frame': self.steps.left_frames.copy(),
+            'Right Frame': self.steps.right_frames.copy(),
             'Step Length': len(self.steps)
         }
         res['Finish reason'] = self.finish_reason
@@ -368,6 +420,8 @@ class HandWashTracker:
         for i in range(1, 13):
             res[f'Step{i} min count'] = self.sys_cfg[i-1]['washcountmax']
             res[f'Step{i} min time'] = self.sys_cfg[i-1]['washtimemax']
+        res['Left Right Count Steps'] = [i for i in range(1, 13) if self.count_need_lr[i]]
+        res['Left Right Time Steps'] = [i for i in range(1, 13) if self.time_need_lr[i]]
         return res
 
     def _finalize_session(self, is_interrupted):
@@ -391,32 +445,33 @@ class HandWashTracker:
         return final_data
 
     def _update_debug_info(self, hands=[]):
-        self.debug_info['status'] = 'Hand Detected' if len(hands) > 0 else 'No Hand'
-        self.debug_info['frames'] = self.frames
-        self.debug_info['counts'] = self.counts
-        self.debug_info['durations'] = self.durations
-        self.debug_info['start_times'] = self.start_times
-        self.debug_info['step_confirmed_times'] = self.step_confirmed_times
-        self.debug_info['step_confirmed'] = self.step_confirmed
-        self.debug_info['last_start_times'] = self.last_start_times
-        self.debug_info['detected_steps'] = self.steps.detected_steps
-        self.debug_info['detecting_step'] = self.detecting_step
-        self.debug_info['sent_msg'] = self.sent_msg
-        self.debug_info['saved_steps'] = self.saved_steps
-        self.debug_info['now'] = self.now
-        #self.debug_info['is_alarm'] = self.is_alarm
-        self.debug_info['is_login'] = self.is_login
+        self.debug_info.update({
+            'status': 'Hand Detected' if len(hands) > 0 else 'No Hand',
+            'frames': self.frames, 'left_frames': self.left_frames, 'right_frames': self.right_frames,
+            'counts': self.counts, 'left_counts': self.left_counts, 'right_counts': self.right_counts,
+            'durations': self.durations, 'left_durations': self.left_durations, 'right_durations': self.right_durations,
+            'start_times': self.start_times,
+            'step_confirmed_times': self.step_confirmed_times,
+            'step_confirmed': self.step_confirmed,
+            'last_start_times': self.last_start_times,
+            'detected_steps': self.steps.detected_steps,
+            'detecting_step': self.detecting_step,
+            'sent_msg': self.sent_msg,
+            'saved_steps': self.saved_steps,
+            'now': self.now,
+            #'is_alarm': self.is_alarm,
+            'is_login': self.is_login,
+        })
 
     def reset_step_info(self, step_id):
-        self.frames[step_id] = 0
-        self.idle_frames[step_id] = 0
-        self.counts[step_id] = 0
-        self.start_times[step_id] = None
-        self.end_times[step_id] = None
-        self.step_confirmed_times[step_id] = None
+        self.categories[step_id] = None
+        for d in (self.frames, self.left_frames, self.right_frames, self.idle_frames,
+                  self.counts, self.left_counts, self.right_counts,
+                  self.durations, self.left_durations, self.right_durations):
+            d[step_id] = 0
+        for d in (self.start_times, self.end_times, self.step_confirmed_times, self.last_start_times):
+            d[step_id] = None
         self.step_confirmed[step_id] = False
-        self.last_start_times[step_id] = None
-        self.durations[step_id] = 0
         self.is_detecting_steps[step_id] = False
         logger.debug(f"[{self.zone_name}] Detecting step {step_id}'s data is reset !")
 
@@ -434,13 +489,7 @@ class HandWashTracker:
             
             # 有發送訊息
             if self.sent_msg is not None:
-                if cmd == 'Reset':
-                    self.pub_no_hand = True
-                    if float(msg['time']) == 0:
-                        self.pub_no_hand_zero = True
-                elif cmd == 'ResetCancel':
-                    self.pub_no_hand = False
-                elif cmd == 'status':
+                if cmd == 'status':
                     if self.detecting_step == 12 and msg['trigger']:
                         logger.info('handwashing completed, waiting for the UI to return to the homepage...')
                         self.cmd_queue.put(('completed', None))
@@ -451,10 +500,7 @@ class HandWashTracker:
 
     def _create_mqtt_message(self, cmd):
         if cmd == 'Reset':
-            timeout = self.sys_cfg[max(self.detecting_step-1, 0)]['timeoutmax']
-            delay = self.time_cfg['pub_hand_delay']
-            remain = max(timeout - max(self.no_hand_elapsed - delay, 0), 0)
-            msgs = {"cmd": cmd, "side": self.zone_name.lower(), "time": str(remain)}
+            msgs = {"cmd": cmd, "side": self.zone_name.lower(), "time": str(self.login_gate.remain)}
         elif cmd == 'ResetCancel':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'BackLogin':  # 12 步驟 reset
@@ -466,14 +512,21 @@ class HandWashTracker:
         elif cmd == 'AlarmCancel':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'status':
-            if not self.durations.get(self.detecting_step):
-                return
             step = self.detecting_step
+            count = self._bucket(step, self.counts, self.left_counts, self.right_counts)[step]
+            duration = self._bucket(step, self.durations, self.left_durations, self.right_durations)[step]
+            if self.count_need_lr[step]:
+                duration = self.left_durations[step] + self.right_durations[step]
+
+            if duration == 0:
+                return
+
             msgs = {
                 "step_id": f"Step{step}",
-                "washcount": str(self.counts[step]),
-                "washtime": str(self.durations[step]),
+                "washcount": str(count),
+                "washtime": str(duration),
                 "side": self.zone_name.lower(),
+                "category": self.categories[step],
                 "trigger": self.step_confirmed[step]
             }
         else:
@@ -556,10 +609,7 @@ class HandWashTracker:
                 self.finish_reason = None
                 self.user_name = cmd['user']
                 self.user_id = cmd['id']
-                self.has_hand_start_time = None
-                self.no_hand_start_time = None
-                self.pub_no_hand = False
-                self.pub_no_hand_zero = False
+                self.login_gate.force_active(True)
                 logger.info(f'[{self.zone_name}] UI became login, '
                             f'[User ID]: {self.user_id}, '
                             f'[User Name]: {self.user_name} !')

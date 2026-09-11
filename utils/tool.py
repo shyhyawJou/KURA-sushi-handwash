@@ -1,5 +1,6 @@
 import numpy as np
 from datetime import datetime, timezone
+import json
 
 
 
@@ -45,3 +46,27 @@ def get_boxes_outside(boxes: np.ndarray, roi: tuple) -> np.ndarray:
     # 判斷中心點是否在 ROI 內 (包含邊界)
     inside_roi = (cx >= rx1) & (cx <= rx2) & (cy >= ry1) & (cy <= ry2)
     return ~inside_roi
+
+
+def parse_lateral_flags(stages: list[dict]) -> tuple[dict, dict]:
+    """
+    回傳 (need_lateral_count, need_lateral_time)
+    兩個 list 的順序跟 stages 順序一致（即 step id 1~12）
+    """
+    need_lateral_count = {}
+    need_lateral_time = {}
+
+    for stage in stages:
+        joined = ''.join(stage['items'])
+
+        lateral_count = ('左手回数' in joined) or ('右手回数' in joined)
+        lateral_time = ('左手時間' in joined) or ('右手時間' in joined)
+
+        # 有左右回數，時間也一定要分左右
+        if lateral_count:
+            lateral_time = True
+
+        need_lateral_count[stage['id']] = lateral_count
+        need_lateral_time[stage['id']] = lateral_time
+
+    return need_lateral_count, need_lateral_time
