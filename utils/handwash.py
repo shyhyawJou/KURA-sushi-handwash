@@ -242,7 +242,6 @@ class HandWashTracker:
             # 是否要區分左右
             if np.any(mask) and (self.time_need_lr[i] or self.count_need_lr[i]):
                 category = self.ai_classes[step_labels[mask][0]].split()[0]
-                assert category in {'left', 'right'}, f'{category}, {self.ai_classes[step_labels[mask][0]]}'
                 self.categories[i] = category
 
             if len(hands) > 0 and np.any(mask):

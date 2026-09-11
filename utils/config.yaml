@@ -306,7 +306,7 @@ logic:
             10: [10]
             11: [11]
 
-        valid_idle_frame: 10
+        valid_idle_frame: 5
     login:
         0: 'hand'
         1: 'scanner'
