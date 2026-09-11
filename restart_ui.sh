@@ -2,7 +2,7 @@
 pkill -f handwash_qt.py; sleep 2
 
 # 停用 Flet
-systemctl disable --now washgui.service
+systemctl disable --now washqt.service
 
 # 啟用 PyQt5
 systemctl enable  --now washqt.service

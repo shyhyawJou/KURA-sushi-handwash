@@ -29,14 +29,18 @@ class Csv_Manager:
 
     def _init_csv(self):
         self.headers = [
-            "Store ID", "User ID", "User Name", "UTC Offset", "Login Mode", "Step Sequence", 
-            "Finished Step", "Login Time", "Start Time", "Action Confirmed Time", "End Time", 
-            "Step Count", "Is Detecting Step", 'Duration', "Frame", 'Step Length', 'Finish reason', 
-            'Region'
+            "Store ID", "User ID", "User Name", "Login Mode", "Login Time", 
+            "Finished Step", "Step Sequence", "Start Time", "Action Confirmed Time", "End Time", 
+            "Step Count", "Left Step Count", "Right Step Count",
+            "Is Detecting Step",
+            "Duration", "Left Duration", "Right Duration",
+            "Frame", "Left Frame", "Right Frame",
+            "Step Length", "Finish reason", "Region", "UTC Offset",
         ]
         for i in range(1, 13):
             self.headers.append(f'Step{i} min count')
             self.headers.append(f'Step{i} min time')
+        self.headers.extend(["Left Right Count Steps", "Left Right Time Steps"])
 
         if not os.path.exists(self.file_path) or self.overwrite:
             with open(self.file_path, 'w', newline='', encoding='utf-8-sig') as f:

@@ -9,11 +9,17 @@ from .tool import get_now_str
 class Step:
     id: int
     frame: int
+    left_frame: int
+    right_frame: int
     count: int
+    left_count: int
+    right_count: int
     start_time: float
     step_confirmed_time: float
     end_time: float
     duration: float
+    left_duration: float
+    right_duration: float
     is_detecting_step: int
 
     def __repr__(self):
@@ -21,8 +27,14 @@ class Step:
             f'\n'
             f'id: {self.id}\n'
             f'frame: {self.frame}\n'
+            f'left_frame: {self.left_frame}\n'
+            f'right_frame: {self.right_frame}\n'
             f'count: {self.count}\n'
+            f'left_count: {self.left_count}\n'
+            f'right_count: {self.right_count}\n'
             f'duration: {self.duration}\n'
+            f'left_duration: {self.left_duration}\n'
+            f'right_duration: {self.right_duration}\n'
             f'start_time: {get_now_str(self.start_time, utc=False)}\n'
             f'step_confirmed_time: {get_now_str(self.step_confirmed_time, utc=False)}\n'
             f'end_time: {get_now_str(self.end_time, utc=False)}\n'
@@ -35,45 +47,68 @@ class Step_History:
     def __init__(self):
         self.ids = []
         self.counts = []
+        self.left_counts = []
+        self.right_counts = []
         self.start_times = []
         self.end_times = []
         self.step_confirmed_times = []
         self.durations = []
+        self.left_durations = []
+        self.right_durations = []
         self.frames = []
+        self.left_frames = []
+        self.right_frames = []
         self.is_detecting_steps = []
         self.detected_steps = {i: None for i in range(1, 13)}
 
     def __getitem__(self, idx):
-        data = Step(self.ids[idx], self.frames[idx], self.counts[idx], self.start_times[idx], 
-                    self.step_confirmed_times[idx], self.end_times[idx], self.durations[idx],
+        data = Step(self.ids[idx], self.frames[idx], self.left_frames[idx], self.right_frames[idx],
+                    self.counts[idx], self.left_counts[idx], self.right_counts[idx],
+                    self.start_times[idx], self.step_confirmed_times[idx], self.end_times[idx],
+                    self.durations[idx], self.left_durations[idx], self.right_durations[idx],
                     self.is_detecting_steps[idx])
         return data
 
-    def append(self, step_id, count, start_time, end_time, step_confirmed_time, duration,
-               frame, is_detecting_step):
+    def append(self, step_id, count, left_count, right_count, start_time, end_time, 
+               step_confirmed_time, duration, left_duration, right_duration,
+               frame, left_frame, right_frame, is_detecting_step):
         self.ids.append(step_id)
         self.counts.append(count)
+        self.left_counts.append(left_count)
+        self.right_counts.append(right_count)
         self.start_times.append(start_time)
         self.end_times.append(end_time)
         self.step_confirmed_times.append(step_confirmed_time)
         self.durations.append(duration)
+        self.left_durations.append(left_duration)
+        self.right_durations.append(right_duration)
         self.frames.append(frame)
+        self.left_frames.append(left_frame)
+        self.right_frames.append(right_frame)
         self.is_detecting_steps.append(int(is_detecting_step))
 
         # 已做過的步驟的紀錄, 用來畫在 frame debug 用
         if is_detecting_step:
-            self.detected_steps[step_id] = Step(step_id, frame, count, start_time, 
+            self.detected_steps[step_id] = Step(step_id, frame, left_frame, right_frame,
+                                                count, left_count, right_count, start_time,
                                                 step_confirmed_time, end_time, duration,
+                                                left_duration, right_duration,
                                                 is_detecting_step)
 
     def insert(self, step: Step, idx):
         self.ids.insert(idx, step.id)
         self.counts.insert(idx, step.count)
+        self.left_counts.insert(idx, step.left_count)
+        self.right_counts.insert(idx, step.right_count)
         self.start_times.insert(idx, step.start_time)
         self.end_times.insert(idx, step.end_time)
         self.step_confirmed_times.insert(idx, step.step_confirmed_time)
         self.durations.insert(idx, step.duration)
+        self.left_durations.insert(idx, step.left_duration)
+        self.right_durations.insert(idx, step.right_duration)
         self.frames.insert(idx, step.frame)
+        self.left_frames.insert(idx, step.left_frame)
+        self.right_frames.insert(idx, step.right_frame)
         self.is_detecting_steps.insert(idx, step.is_detecting_step)
         if step.is_detecting_step:
             self.detected_steps[step.id] = step
@@ -81,11 +116,17 @@ class Step_History:
     def pop(self):
         last_id = self.ids.pop()
         self.counts.pop()
+        self.left_counts.pop()
+        self.right_counts.pop()
         self.start_times.pop()
         self.end_times.pop()
         self.step_confirmed_times.pop()
         self.durations.pop()
+        self.left_durations.pop()
+        self.right_durations.pop()
         self.frames.pop()
+        self.left_frames.pop()
+        self.right_frames.pop()
         self.is_detecting_steps.pop()
         if last_id in self.detected_steps:
             self.detected_steps.pop(last_id)
@@ -102,11 +143,17 @@ class Step_History:
 
         self.ids = [self.ids[i] for i in order]
         self.counts = [self.counts[i] for i in order]
+        self.left_counts = [self.left_counts[i] for i in order]
+        self.right_counts = [self.right_counts[i] for i in order]
         self.start_times = [self.start_times[i] for i in order]
         self.end_times = [self.end_times[i] for i in order]
         self.step_confirmed_times = [self.step_confirmed_times[i] for i in order]
         self.durations = [self.durations[i] for i in order]
+        self.left_durations = [self.left_durations[i] for i in order]
+        self.right_durations = [self.right_durations[i] for i in order]
         self.frames = [self.frames[i] for i in order]
+        self.left_frames = [self.left_frames[i] for i in order]
+        self.right_frames = [self.right_frames[i] for i in order]
         self.is_detecting_steps = [self.is_detecting_steps[i] for i in order]
 
 
