@@ -56,7 +56,8 @@ class HandWashTracker:
         self.origin_clip = Clip(**CFG['clip']['origin'], tag=f'{self.zone_name}_Origin')
         self.result_clip = Clip(**CFG['clip']['result'], tag=f'{self.zone_name}_Result')
 
-        logger.debug(f'step labels: {self.step_labels}')
+        logger.debug(f'step labels: {self.step_labels}\n'
+                     f'label scrub hand: {self.label_scrub_hand}')
 
     def reset(self):
         self.now = time()       
