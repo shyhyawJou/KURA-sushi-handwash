@@ -2,6 +2,7 @@ import os
 import csv
 from datetime import datetime
 from pathlib import Path as p
+from .tool import get_utc_offset
 from loguru import logger
 
 
@@ -17,7 +18,7 @@ class HandTriggerLogger:
     CSV 只有一列記錄一次完整的「進入 -> 離開」，欄位: Region, Enter Time, Exit Time。
     檔名產生方式、同一天只用同一份檔案的邏輯，都跟 Csv_Manager 一致。
     """
-    HEADERS = ["Region", "Enter Time", "Exit Time"]
+    HEADERS = ["Region", 'UTC Offset', "Enter Time", "Exit Time"]
 
     def __init__(self, save_dir):
         self.current_date = datetime.now().strftime('%Y%m%d')
@@ -70,6 +71,6 @@ class HandTriggerLogger:
 
         enter_time = self._pending_enter.pop(region, '')
         with open(self.file_path, 'a', newline='', encoding='utf-8') as f:
-            csv.writer(f).writerow([region, enter_time, time_str])
+            csv.writer(f).writerow([region, get_utc_offset(), enter_time, time_str])
 
         logger.info(f"[{region}] hand-trigger {enter_time} -> {time_str}")

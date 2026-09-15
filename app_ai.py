@@ -9,10 +9,13 @@ from time import time, sleep
 from datetime import datetime
 from pathlib import Path as p
 import re
+import os
+from os.path import dirname
 import cv2
 import numpy as np
 import socket
 import subprocess
+from threading import Thread
 from utils import (Mjpeg_Streamer, 
                    RTMDet_ONNX, 
                    Camera,
@@ -62,13 +65,11 @@ class App_HandWash:
         self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, 
                                              self.mqtt_manager, CFG['mqtt']['pub_freq'],
                                              hand_trigger_logger=self.hand_trigger_logger)
-        self.is_left_login = False
-        self.is_right_login = False
-        self.is_ai_login = True
 
         # 重要標籤
         self.wash_labels = self.tracker_left.step_labels_1d
         self.exit_program = False
+        self.capture_cmd = None
 
         # mqtt callback
         callbacks = {
@@ -78,19 +79,12 @@ class App_HandWash:
                        'right': self.tracker_right.logout_callback},
             'NextStep': {'left': self.tracker_left.switch_step_callback, 
                          'right': self.tracker_right.switch_step_callback},
-            'Trigger': {'left': self.tracker_left.switch_login_mode_callback, 
-                        'right': self.tracker_right.switch_login_mode_callback},
+            'Capture': self.capture_callback,            
         }
         self.mqtt_manager.add_callbacks(callbacks)
         
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
-
-        if not self.is_left_login:
-            logger.warning('[Left] current state is logout !')
-        if not self.is_right_login:
-            logger.warning('[Right] current state is logout !')
-
         logger.success('all init succeeded !')
 
     def run(self):
@@ -129,7 +123,7 @@ class App_HandWash:
                 with loop_timer:
                     # read frame
                     with read_frame_timer:
-                        ret, frame = self.camera.get_latest_frame()
+                        ret, (origin, frame) = self.camera.get_latest_frame()
                     
                     pbar.update(1)
 
@@ -174,9 +168,16 @@ class App_HandWash:
                     with frame_copy_timer:
                         frame_copy = frame.copy()
 
-                    # 洗手檢測
+                    # now
                     now = time()
 
+                    # 截圖
+                    if self.capture_cmd is not None:
+                        args = (self.capture_cmd['path'], now, origin, frame)
+                        Thread(target=self.do_capture, args=args, daemon=True).start()
+                        self.capture_cmd = None
+
+                    # 洗手檢測
                     with handwash_timer:
                         res_l = self.tracker_left.update(
                             left_dets, 
@@ -285,21 +286,17 @@ class App_HandWash:
         logger.info(f'CSV path: {self.csv_manager.file_path}')
         logger.success("release all sources !")
 
-    def _login_callback(self, msg):
-        try:
-            cmd = msg['cmd']
-            side = msg['side'].lower()
-            if cmd == 'Login':
-                if side == 'left':
-                    self.is_left_login = True
-                    logger.info('[Left] Login, Begin detection !')
-                elif side == 'right':
-                    self.is_right_login = True
-                    logger.info('[Right] Login, Begin detection !')
-                else:
-                    logger.error(f'Unknown Login message: {msg}')
-        except:
-            logger.error(traceback.format_exc())
+    def capture_callback(self, cmd):
+        self.capture_cmd = cmd
+
+    def do_capture(self, folder, now, origin, frame):
+        now = datetime.fromtimestamp(now).strftime('%Y%m%d_%H%M%S.%f')[:-3]
+        dst_origin = f'{folder}/{now}_origin.jpg'
+        dst_frame = f'{folder}/{now}_frame.jpg'
+        os.makedirs(dirname(dst_origin), exist_ok=True)
+        cv2.imwrite(dst_origin, origin)
+        cv2.imwrite(dst_frame, frame)
+        logger.success(f'saved captures in the "{folder}"')
 
 
 def get_sort_key(path_obj):
