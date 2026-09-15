@@ -70,9 +70,8 @@ class MQTT:
                 self.callbacks['Logout'][side](cmd)
             elif cmd['cmd'] == 'NextStep':
                 self.callbacks['NextStep'][side](cmd)
-            elif cmd['cmd'] == 'Trigger':
-                self.callbacks['Trigger']['left'](cmd)
-                self.callbacks['Trigger']['right'](cmd)
+            elif cmd['cmd'] == 'Capture':
+                self.callbacks['Capture'](cmd)
         except:
             logger.error(f"{traceback.format_exc()}, "
                          f"MQTT [{msg.topic}] received: {payload}")

@@ -45,7 +45,7 @@ class Camera:
         try:
             return self._raw_read()
         except queue.Empty:
-            return False, None
+            return False, (None, None)
 
     def stop(self):
         """停止執行緒並釋放"""
@@ -66,12 +66,12 @@ class Camera:
     def _raw_read(self):
         """底層讀取硬體影像並進行裁切"""
         if self.capture is None:
-            return False, None
+            return False, (None, None)
         
         ret, frame = self.capture.read()
         if not ret:
             self.n_fake_frame += 1
-            return False if self.n_fake_frame == self.max_fake_frames else None, None
+            return False if self.n_fake_frame == self.max_fake_frames else None, (None, None)
 
         # 重置
         self.n_fake_frame = 0
@@ -83,18 +83,19 @@ class Camera:
             frame = frame[y1:y2, x1:x2].copy()
 
         # resize
-        frame = resize_keep_scale(frame, (640, 480), 'corner')
+        resized = resize_keep_scale(frame, (640, 480), 'corner')
 
         if self.is_first_frame:
             logger.info(f'frame (h, w): {(frame.shape[:2])}')
             self.is_first_frame = False
 
-        return True, frame
+        return True, (frame, resized)
 
     def _release(self):
         if self.capture:
             self.capture.release()
             logger.success(f"Video {self.video_path} and camera thread are released.")
+            self.capture = None
 
     def _cal_crop_region(self, img_h, img_w):
         crop_area = self.crop_area * [img_w, img_h, img_w, img_h]
