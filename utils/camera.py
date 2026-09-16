@@ -68,7 +68,7 @@ class Camera:
         if self.capture is None:
             return False, (None, None)
         
-        ret, frame = self.capture.read()
+        ret, origin = self.capture.read()
         if not ret:
             self.n_fake_frame += 1
             return False if self.n_fake_frame == self.max_fake_frames else None, (None, None)
@@ -78,18 +78,18 @@ class Camera:
 
         if len(self.crop_area) > 0:
             if self.crop_coords is None:
-                self.crop_coords = self._cal_crop_region(*frame.shape[:2])
+                self.crop_coords = self._cal_crop_region(*origin.shape[:2])
             x1, y1, x2, y2 = self.crop_coords
-            frame = frame[y1:y2, x1:x2].copy()
+            crop = origin[y1:y2, x1:x2].copy()
 
         # resize
-        resized = resize_keep_scale(frame, (640, 480), 'corner')
+        frame = resize_keep_scale(crop, (640, 480), 'corner')
 
         if self.is_first_frame:
             logger.info(f'frame (h, w): {(frame.shape[:2])}')
             self.is_first_frame = False
 
-        return True, (frame, resized)
+        return True, (origin, frame)
 
     def _release(self):
         if self.capture:
