@@ -21,8 +21,10 @@ class HandWashTracker:
         self.valid_login_modes = set(logic_cfg['login'].values())
         logger.warning(f'[{zone_name}] current login mode is "{self.login_mode}"')
 
-        # 手觸發登入/登出的時間記錄器 (跟主要洗手紀錄 CSV 完全分開, 沒給就不記錄)
+        # 手觸發登入/登出的時間記錄器 (跟主要洗手紀錄 CSV 完全分開)
         self.hand_trigger_logger = hand_trigger_logger
+        self._no_login_wash_streak = 0
+        self._no_login_wash_idle = 0
 
         # check config
         assert self.cfg['alarm_frame'] > 0
@@ -49,6 +51,14 @@ class HandWashTracker:
         self.mqtt = mqtt
         self.pub_period = 1. / pub_freq
 
+        # 手觸發登入/登出去彈跳狀態機: 只反映真實手的出現/消失, 
+        self.hand_trigger_gate = HandPresenceGate(
+            self.time_cfg['pub_hand_delay'],
+            exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
+        )
+        self._any_step_done_since_hand_trigger = False
+        self._hand_trigger_enter_time = None
+
         # 初始化
         self.reset()
 
@@ -71,14 +81,8 @@ class HandWashTracker:
         self.sent_msg = None
         self.saved_steps = []
 
-        # 登入狀態機
-        self.login_gate = HandPresenceGate(
-            self.time_cfg['pub_hand_delay'],
-            exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
-        )
-
         # 手計數狀態機:
-        self.hand_trigger_gate = HandPresenceGate(
+        self.login_gate = HandPresenceGate(
             self.time_cfg['pub_hand_delay'],
             exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
         )
@@ -147,14 +151,28 @@ class HandWashTracker:
 
         # 手觸發登入/登出時間記錄: 跟真正的登入狀態無關, 只是借用同一套去彈跳規則
         self.hand_trigger_gate.update(self.now, has_hand)
-        if self.hand_trigger_logger is not None:
-            if self.hand_trigger_gate.entered:
-                self.hand_trigger_logger.log(self.zone_name.lower(), 'Login', get_now_str(self.now, utc=True))
-            if self.hand_trigger_gate.exited:
+        if self.hand_trigger_gate.entered:
+            self._any_step_done_since_hand_trigger = False
+            self._hand_trigger_enter_time = get_now_str(self.now, utc=True)
+        if self.hand_trigger_gate.exited and self.hand_trigger_logger is not None:
+            if self._any_step_done_since_hand_trigger:
+                self.hand_trigger_logger.log(self.zone_name.lower(), 'Login', self._hand_trigger_enter_time)
                 self.hand_trigger_logger.log(self.zone_name.lower(), 'Logout', get_now_str(self.now, utc=True))
 
         # scanner 模式下且沒登入
         if self.login_mode == 'scanner' and not self.is_login:
+            # 沒掃 barcode, 但如果畫面上「穩定」偵測到洗手動作
+            if np.any(np.isin(detections['label'], self.step_labels_1d)):
+                self._no_login_wash_streak += 1
+                self._no_login_wash_idle = 0
+            else:
+                self._no_login_wash_idle += 1
+                if self._no_login_wash_idle > 5:
+                    self._no_login_wash_streak = 0
+
+            if self._no_login_wash_streak >= 10:
+                self._any_step_done_since_hand_trigger = True
+
             self._update_debug_info(hands)
             return
 
@@ -382,6 +400,7 @@ class HandWashTracker:
                           self.left_frames[step_id], self.right_frames[step_id],
                           int(self.is_detecting_steps[step_id]))
         self.saved_steps.append(step_id)
+        self._any_step_done_since_hand_trigger = True
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
 
     def _get_final_data(self):

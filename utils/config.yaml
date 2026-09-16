@@ -210,18 +210,9 @@ clip:
 
 visualization:
     bbox:
-        omit_classes: []
-            #- 'left'
-            #- 'right'
-            #- 'gloved hand'
-            #- 'alcohol nozzle'
-            #- 'nail brush'
-            #- 'paper towel'
-            #- 'air outlet'
-            #- 'brush tray'
-            #- 'faucet'
-            #- 'sink'
-            #- 'soap dispenser'
+        omit_classes: # []
+            - 'left'
+            - 'right'
         bbox_thickness: 2
         plot_score: true
         font_scale: 0.35
@@ -328,11 +319,13 @@ mqtt:
             process: 'handwash/process'
         subscribe:
             system: 'handwash/system'
+            my: 'handwash/my'
     sub_cmds:  # 訂閱的指令
         - 'Login'
         - 'Logout'
         - 'NextStep'
-        - 'Trigger'
+        - 'Capture'
+        - 'BnLogin'
     qos: 0
     pub_freq: 5
 

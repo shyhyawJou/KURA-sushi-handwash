@@ -46,9 +46,10 @@ class Camera:
     def get_latest_frame(self):
         """外部呼叫此方法取得最新畫面"""
         try:
-            return self._raw_read()
+            origin, frame = self.frame_queue.get(timeout=0.1)
         except queue.Empty:
-            return False, None
+            return False, (None, None)
+        return True, (origin, frame)
 
     def stop(self):
         """停止執行緒並釋放"""
@@ -96,35 +97,35 @@ class Camera:
     def _raw_read(self):
         """底層讀取硬體影像並進行裁切"""
         if self.capture is None:
-            return False, None
+            return False, (None, None)
         
-        ret, frame = self.capture.read()
+        ret, origin = self.capture.read()
         if not ret:
             self.n_fake_frame += 1
-            return False if self.n_fake_frame == self.max_fake_frames else None, None
+            return False if self.n_fake_frame == self.max_fake_frames else None, (None, None)
 
         # 重置
         self.n_fake_frame = 0
 
         if len(self.crop_area) > 0:
             if self.crop_coords is None:
-                self.crop_coords = self._cal_crop_region(*frame.shape[:2])
+                self.crop_coords = self._cal_crop_region(*origin.shape[:2])
             x1, y1, x2, y2 = self.crop_coords
-            frame = frame[y1:y2, x1:x2].copy()
+            crop = origin[y1:y2, x1:x2].copy()
 
         # resize
-        frame = resize_keep_scale(frame, (640, 480), 'corner')
+        frame = resize_keep_scale(crop, (640, 480), 'corner')
 
         if self.is_first_frame:
             logger.info(f'frame (h, w): {(frame.shape[:2])}')
             self.is_first_frame = False
 
-        return True, frame
+        return True, (origin, frame)
 
     def _update_loop(self):
         """背景執行緒迴圈：確保 queue 永遠存有最新的一張圖"""
         while self._is_running:
-            ret, frame = self._raw_read()
+            ret, (origin, frame) = self._raw_read()
             if ret:
                 # 若 queue 已滿，移除舊幀放入新幀，確保處理延遲最低
                 if self.frame_queue.full():
@@ -132,7 +133,7 @@ class Camera:
                         self.frame_queue.get_nowait()
                     except queue.Empty:
                         pass
-                self.frame_queue.put_nowait(frame)
+                self.frame_queue.put_nowait((origin, frame))
         
         # 釋放資源
         self._release()
