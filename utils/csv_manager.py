@@ -35,7 +35,7 @@ class Csv_Manager:
             "Is Detecting Step",
             "Duration", "Left Duration", "Right Duration",
             "Frame", "Left Frame", "Right Frame",
-            "Step Length", "Finish reason", "Region", "UTC Offset",
+            "Step Length", "Login reason", "Finish reason", "Region", "UTC Offset",
         ]
         for i in range(1, 13):
             self.headers.append(f'Step{i} min count')

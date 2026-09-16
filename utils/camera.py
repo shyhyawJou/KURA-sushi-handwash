@@ -76,14 +76,15 @@ class Camera:
         # 重置
         self.n_fake_frame = 0
 
+        frame = origin
         if len(self.crop_area) > 0:
             if self.crop_coords is None:
                 self.crop_coords = self._cal_crop_region(*origin.shape[:2])
             x1, y1, x2, y2 = self.crop_coords
-            crop = origin[y1:y2, x1:x2].copy()
+            frame = origin[y1:y2, x1:x2].copy()
 
         # resize
-        frame = resize_keep_scale(crop, (640, 480), 'corner')
+        frame = resize_keep_scale(frame, (640, 480), 'corner')
 
         if self.is_first_frame:
             logger.info(f'frame (h, w): {(frame.shape[:2])}')

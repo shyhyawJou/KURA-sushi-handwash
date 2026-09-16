@@ -152,7 +152,7 @@ def on_message(client, userdata, msg):
         return
 
     # 自己發出的指令（Logout / NextStep）會被自己收到，直接忽略
-    if cmd in ("Logout", "NextStep", "AILogin", "Reset", "ResetCancel", 'Login', 'Alarm', 'AlarmCancel', 'Trigger'):
+    if cmd in ("Logout", "NextStep", "AILogin", "Reset", "ResetCancel", 'Login', 'Alarm', 'AlarmCancel', 'Trigger', 'AIDetection'):
         return
 
     side = data.get("side")
