@@ -154,6 +154,9 @@ class HandWashTracker:
         if self.hand_trigger_gate.entered:
             self._any_step_done_since_hand_trigger = False
             self._hand_trigger_enter_time = get_now_str(self.now, utc=True)
+            if self.login_mode == 'scanner':
+                self._publish_status(self.mqtt.pub_topics['system'], 'AIDetection', fatal=True)
+                
         if self.hand_trigger_gate.exited and self.hand_trigger_logger is not None:
             if self._any_step_done_since_hand_trigger:
                 self.hand_trigger_logger.log(self.zone_name.lower(), 'Login', self._hand_trigger_enter_time)
@@ -529,6 +532,8 @@ class HandWashTracker:
         elif cmd == 'Alarm':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'AlarmCancel':
+            msgs = {"cmd": cmd, "side": self.zone_name.lower()}
+        elif cmd == 'AIDetection':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'status':
             step = self.detecting_step
