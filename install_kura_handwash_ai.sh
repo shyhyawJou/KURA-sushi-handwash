@@ -6,12 +6,12 @@ SERVICES=(kurasushi_handwash.service disk_monitor.service)
 unzip -o ${DATA_DIR}.zip -d /mnt/reserved
 
 pip3 install \
-    opencv-python \
-    numpy \
-    uvicorn \
-    fastapi \
-    loguru \
-    ntplib
+    opencv-python==4.11.0.86 \
+    numpy==1.26.4 \
+    uvicorn==0.50.2 \
+    fastapi==0.139.0 \
+    loguru==0.7.3 \
+    ntplib==0.4.0
 
 cd /mnt/reserved/${DATA_DIR}
 

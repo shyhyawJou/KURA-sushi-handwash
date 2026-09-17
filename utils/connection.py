@@ -70,6 +70,8 @@ class MQTT:
                 self.callbacks['Logout'][side](cmd)
             elif cmd['cmd'] == 'NextStep':
                 self.callbacks['NextStep'][side](cmd)
+            elif cmd['cmd'] == 'BnLogin':
+                self.callbacks['BnLogin'][side](cmd)
             elif cmd['cmd'] == 'Capture':
                 self.callbacks['Capture'](cmd)
         except:
