@@ -88,7 +88,7 @@ device:
 
 log:
     folder: 'log'
-    level: TRACE
+    level: INFO
 
 throttled_logger:
     log_interval: 60

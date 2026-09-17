@@ -75,6 +75,8 @@ class App_HandWash:
         callbacks = {
             'Login': {'left': self.tracker_left.login_callback, 
                       'right': self.tracker_right.login_callback},
+            'BnLogin': {'left': self.tracker_left.button_login_callback, 
+                        'right': self.tracker_right.button_login_callback},
             'Logout': {'left': self.tracker_left.logout_callback, 
                        'right': self.tracker_right.logout_callback},
             'NextStep': {'left': self.tracker_left.switch_step_callback, 

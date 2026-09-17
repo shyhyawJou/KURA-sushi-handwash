@@ -71,6 +71,7 @@ class HandWashTracker:
 
     def reset(self):
         self.now = time()       
+        self.login_reason = None
         self.finish_reason = None
         self.detecting_step = self.cfg['init_step_num']
         self.pub_time = float('-inf')
@@ -226,6 +227,7 @@ class HandWashTracker:
             if self.login_gate.entered:
                 self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
                 self.is_login = True
+                self.login_reason = 'Hand'
                 self.login_time = get_now_str(self.now, utc=True)
                 self.origin_clip.start()
                 self.result_clip.start()
@@ -415,8 +417,8 @@ class HandWashTracker:
 
         res = {
             "Store ID": "test", 
-            "User ID": '' if self.login_mode == 'hand' else str(self.user_id),
-            "User Name": '' if self.login_mode == 'hand' else str(self.user_name),
+            "User ID": str(self.user_id) if self.user_id is not None else '',
+            "User Name": str(self.user_name) if self.user_name is not None else '',
             "UTC Offset": get_utc_offset(),
             "Login Mode": self.login_mode,
             "Step Sequence": self.steps.ids.copy(),
@@ -437,6 +439,7 @@ class HandWashTracker:
             'Right Frame': self.steps.right_frames.copy(),
             'Step Length': len(self.steps)
         }
+        res['Login reason'] = self.login_reason
         res['Finish reason'] = self.finish_reason
         res['Region'] = self.zone_name.lower()
         for i in range(1, 13):
@@ -606,7 +609,18 @@ class HandWashTracker:
         self.cmd_queue.put(('switch_step', cmd))
 
     def login_callback(self, cmd):
-        self.cmd_queue.put(('login', cmd))
+        """ QR code 登入 """
+        if self.is_login:
+            logger.warning('current status is login, so ignored the command of "login" !')
+        else:
+            self.cmd_queue.put(('login', cmd))
+
+    def button_login_callback(self, cmd):
+        """ UI Button 登入 """
+        if self.is_login:
+            logger.warning('current status is login, so ignored the command of "UI button login" !')
+        else:
+            self.cmd_queue.put(('bn_login', cmd))
 
     def logout_callback(self, cmd):
         self.cmd_queue.put(('logout', cmd))
@@ -627,9 +641,10 @@ class HandWashTracker:
                 self.is_switch_step = True
                 self.next_step = int(cmd['step_id'].replace('Step', ''))
 
-            elif kind == 'login':
+            elif kind == 'login' and not self.is_login:
                 self.is_login = True
                 self.is_final = False
+                self.login_reason = 'QR code'
                 self.finish_reason = None
                 self.user_name = cmd['user']
                 self.user_id = cmd['id']
@@ -641,6 +656,17 @@ class HandWashTracker:
                 self.result_clip.start()
                 self.login_time = get_now_str(self.now, utc=True)
 
+            elif kind == 'bn_login' and not self.is_login:
+                self.is_login = True
+                self.is_final = False
+                self.login_reason = 'UI button'
+                self.finish_reason = None
+                self.login_gate.force_active(True)
+                logger.info(f'[{self.zone_name}] UI became login, because of button')
+                self.origin_clip.start()
+                self.result_clip.start()
+                self.login_time = get_now_str(self.now, utc=True)
+                
             elif kind == 'logout':
                 logger.warning(f'[{self.zone_name}] UI became logout !')
                 self._become_final('all completed')
