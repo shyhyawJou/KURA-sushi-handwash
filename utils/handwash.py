@@ -227,6 +227,7 @@ class HandWashTracker:
             if self.login_gate.entered:
                 self._publish_status(self.mqtt.pub_topics['system'], 'AILogin', fatal=True)
                 self.is_login = True
+                self.login_reason = 'Hand'
                 self.login_time = get_now_str(self.now, utc=True)
                 self.origin_clip.start()
                 self.result_clip.start()

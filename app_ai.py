@@ -114,11 +114,11 @@ class App_HandWash:
         # loop
         while self.is_running:
             try:
-                is_login = self.tracker_left.is_login or self.tracker_right.is_login
-                login_mode = self.tracker_left.login_mode
-                if login_mode == 'scanner' and not is_login:
-                    sleep(0.05)
-                    continue
+                #is_login = self.tracker_left.is_login or self.tracker_right.is_login
+                #login_mode = self.tracker_left.login_mode
+                #if login_mode == 'scanner' and not is_login:
+                #    sleep(0.05)
+                #    continue
 
                 with loop_timer:
                     # read frame
@@ -338,7 +338,6 @@ def get_sort_key(path_obj):
 if __name__ == "__main__":
     FOLDER = 'video'
     #FOLDER = 'videos_for_report'
-    #FOLDER = 'clips/0793'
 
     for folder in sorted(p(FOLDER).glob('*')):
         if not folder.is_dir():
