@@ -216,7 +216,7 @@ class HandWashTracker:
 
             if self.login_gate.exiting or self.login_gate.exited:
                 self._publish_status(self.mqtt.pub_topics['system'], 'Reset',
-                                     fatal=self.login_gate.exit_started)
+                                     fatal=self.login_gate.exit_started or self.login_gate.exited)
 
             if self.login_gate.exited:
                 self.is_login = False
