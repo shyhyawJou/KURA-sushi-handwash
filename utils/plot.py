@@ -163,7 +163,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
     
     def draw_text_with_shadow(image, text, org, color=(255, 255, 255), size=0.31, thickness=1):
         # 繪製黑色陰影
-        cv2.putText(image, text, (org[0] + 1, org[1] + 1), font, size, (0, 0, 0), thickness + 1, cv2.LINE_AA)
+        cv2.putText(image, text, (org[0] + 1, org[1] + 1), font, size, (0, 0, 0), thickness, cv2.LINE_AA)
         # 繪製主文字
         cv2.putText(image, text, org, font, size, color, thickness, cv2.LINE_AA)
 
