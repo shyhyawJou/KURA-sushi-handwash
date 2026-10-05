@@ -75,6 +75,8 @@ class App_HandWash:
         callbacks = {
             'Login': {'left': self.tracker_left.login_callback, 
                       'right': self.tracker_right.login_callback},
+            'BnLogin': {'left': self.tracker_left.button_login_callback, 
+                        'right': self.tracker_right.button_login_callback},
             'Logout': {'left': self.tracker_left.logout_callback, 
                        'right': self.tracker_right.logout_callback},
             'NextStep': {'left': self.tracker_left.switch_step_callback, 
@@ -348,11 +350,13 @@ if __name__ == "__main__":
         #    continue
         #if folder.name != '20260709':
         #    continue
-        if folder.name != '20260806':
+        if folder.name != '20260806':  # benchmark
             continue
         #if folder.name != 'demo_gg':
         #    continue
         #if folder.name != '20260817':
+        #    continue
+        #if folder.name != '20261005':  # 靠近水龍頭做搓洗動作時的辨識不好
         #    continue
 
         # flag
