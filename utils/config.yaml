@@ -14,39 +14,14 @@ streamer:
 
 AI:
     handwash:
-        #path: 'best_0.8380_0.9060_epoch_91_kura_v16.onnx'
-        #path: 'best_0.8510_0.9030_epoch_56_kura_spray_alcohol_v2.onnx'
-        #path: 'best_0.8830_0.9290_epoch_38_kura_spray_alcohol_v7.onnx'
-        #path: 'best_0.9200_0.9680_epoch_8_kura_spray_alcohol_v11_fp16.dla'
-        #path: 'best_0.9220_0.9700_epoch_11_kura_spray_alcohol_v14_fp16.dla'
-        #path: 'best_0.9370_0.9760_epoch_2_kura_spray_alcohol_v15_fp16.dla'
-        #path: 'best_0.8960_0.9540_epoch_16_kura_spray_alcohol_v17_fp16.dla'
-        #path: 'best_0.9040_0.9550_epoch_11_kura_spray_alcohol_v17_fp16.dla'
-        #path: 'best_0.9460_0.8540_epoch_23_kura_spray_alcohol_v19_fp1.dla'
-        #path: 'best_0.9290_0.8340_epoch_39_kura_spray_alcohol_v20_fp16.dla'
-        #path: 'best_0.9110_0.7850_epoch_17_kura_handwash_v2_fp16.dla'
-        #path: 'best_0.9140_0.7930_epoch_23_kura_handwash_v4_fp16.dla'
-        #path: 'best_0.9090_0.7990_epoch_1_kura_handwash_v6_fp16.dla'
-        #path: 'best_0.9050_0.8000_epoch_15_kura_handwash_v7_fp16.dla'
-        #path: 'best_0.9060_0.8000_epoch_16_kura_handwash_v8_fp16.dla'
-        #path: 'best_0.9080_0.7940_epoch_17_kura_handwash_v9_fp16.dla'
-        #path: 'best_0.9130_0.8080_epoch_18_kura_handwash_v10_fp16.dla'
-        #path: best_0.9150_0.8100_epoch_20_kura_handwash_v11_fp16.dla
         #path: best_0.9040_0.8110_epoch_16_kura_handwash_v15_fp16.dla
         #path: best_0.9050_0.7910_epoch_10_kura_handwash_v17_fp16.dla
-        path: best_0.9050_0.8030_epoch_10_kura_handwash_v21_fp16.dla
-        #score_threshs: [0.8, 0.75, 0.9, 0.7, 0.2, 0.35, 0.65, 0.65, 0.25, 0.95, 0.75, 0.7, 0.6]  # kura_handwash_v1
-        #score_threshs: [0.9, 0.9, 0.95, 0.25, 0.05, 0.3, 0.75, 0.7, 0.35, 0.95, 0.85, 0.9, 0.2]
-        #score_threshs: [0.95, 0.65, 0.9, 0.5, 0.25, 0.45, 0.7, 0.7, 0.35, 0.9, 0.8, 0.95, 0.5]
-        #score_threshs: [0.95, 0.85, 0.75, 0.7, 0.15, 0.75, 0.6, 0.6, 0.35, 0.85, 0.85, 0.95, 0.75]
-        #score_threshs: [0.95, 0.95, 0.85, 0.5, 0.6, 0.75, 0.65, 0.55, 0.35, 0.95, 0.8, 0.85, 0.8]
-        #score_threshs: [0.95, 0.5, 0.8, 0.5, 0.4, 0.5, 0.6, 0.5, 0.25, 0.85, 0.7, 0.85, 0.9]
-        #score_threshs: [0.95, 0.7, 0.8, 0.95, 0.25, 0.35, 0.65, 0.5, 0.1, 0.9, 0.7, 0.85, 0.25]
-        #score_threshs: [0.95, 0.4, 0.9, 0.65, 0.6, 0.4, 0.5, 0.5, 0.75, 0.85, 0.7, 0.85, 0.65]
-        #score_threshs: [0.95, 0.25, 0.3, 0.35, 0.2, 0.35, 0.6, 0.5, 0.1, 0.95, 0.75, 0.85, 0.8]
+        #path: best_0.9050_0.8030_epoch_10_kura_handwash_v21_fp16.dla
+        path: best_0.9090_0.8060_epoch_10_kura_handwash_v21_fp16.dla
         #score_threshs: [0.95, 0.85, 0.95, 0.65, 0.95, 0.6, 0.4, 0.9, 0.6, 0.6, 0.7, 0.8, 0.25, 0.75, 0.6, 0.25]
         #score_threshs: [0.95, 0.9, 0.95, 0.55, 0.95, 0.7, 0.75, 0.75, 0.5, 0.6, 0.75, 0.8, 0.5, 0.55, 0.55, 0.2]
-        score_threshs: [0.6, 0.95, 0.95, 0.65, 0.9, 0.3, 0.6, 0.85, 0.8, 0.95, 0.9, 0.95, 0.8, 0.7, 0.6, 0.5]
+        #score_threshs: [0.6, 0.95, 0.95, 0.65, 0.9, 0.3, 0.6, 0.85, 0.8, 0.95, 0.9, 0.95, 0.8, 0.7, 0.6, 0.5]
+        score_threshs: [0.75, 0.9, 0.85, 0.6, 0.9, 0.6, 0.75, 0.65, 0.6, 0.75, 0.85, 0.95, 0.75, 0.4, 0.55, 0.5]
         iou_thresh: 0.01
         input_wh: [448, 448]
 
