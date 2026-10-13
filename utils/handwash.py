@@ -41,11 +41,13 @@ class HandWashTracker:
                             for i, names in self.cfg['step_name'].items()}
         self.step_labels_1d = [l for labels in self.step_labels.values() for l in labels]
         self.srcub_steps = {i for i, cfg in enumerate(self.sys_cfg, 1) if cfg['washcountmax'] > 0}
+        self.num_step = CFG['logic']['handwash_parameter']['num_step']
         assert self.srcub_steps == self.cfg['scrub_count_ratio'].keys()
         self.scrub_count_ratio = {i: (self.cfg['scrub_count_ratio'][i] if i in self.srcub_steps else -1) 
-                                  for i in range(1, 13)}
+                                  for i in range(1, self.num_step + 1)}
         self.count_need_lr, self.time_need_lr = parse_lateral_flags(self.sys_cfg)
-        assert len(self.step_labels) == len(self.count_need_lr), f'{len(self.step_labels), len(self.count_need_lr)}'
+        assert len(self.step_labels) == len(self.count_need_lr) == self.num_step, \
+            f'{len(self.step_labels), len(self.count_need_lr)}'
 
         # mqtt
         self.mqtt = mqtt
@@ -88,7 +90,7 @@ class HandWashTracker:
             exit_timeout_fn=lambda now: self.sys_cfg[max(self.detecting_step - 1, 0)]['timeoutmax'],
         )
         self.is_final = False  # 重置訊號
-        self.is_paused = False  # 完成 12 步驟後, 等待 UI 回到首頁後發出通知
+        self.is_paused = False  # 完成所有步驟後, 等待 UI 回到首頁後發出通知
         self.login_time = None
         
         # 使用者資訊
@@ -99,7 +101,7 @@ class HandWashTracker:
         self.steps = Step_History()
 
         # 當下洗手資訊
-        new_dict = lambda value=0: MyDict({i: value for i in range(1, 13)})
+        new_dict = lambda value=0: MyDict({i: value for i in range(1, self.num_step + 1)})
         self.frames = new_dict()
         self.left_frames = new_dict()
         self.right_frames = new_dict()
@@ -256,7 +258,7 @@ class HandWashTracker:
         step_boxes = detections['box'][mask]
         step_labels = detections['label'][mask]
 
-        for i in range(1, 12):
+        for i in range(1, self.num_step):
             # step 1 和 8 只需要檢測其中一個
             if i == (1 if self.detecting_step > 2 else 8):  # 做完肥皂後的洗手視為 step8
                 continue
@@ -309,8 +311,8 @@ class HandWashTracker:
             self.step_confirmed_times[step_id] = self.now
             logger.debug(f'[{self.zone_name}] Step {step_id}: action confirmed !')
 
-            # step12 一滿足就 reset
-            if step_id == 12 and step_id != self.detecting_step:
+            # 最後步驟一滿足就 reset
+            if step_id == self.num_step and step_id != self.detecting_step:
                 self._undo_step(step_id, force=True)
 
         # 計算做了多久
@@ -442,11 +444,11 @@ class HandWashTracker:
         res['Login reason'] = self.login_reason
         res['Finish reason'] = self.finish_reason
         res['Region'] = self.zone_name.lower()
-        for i in range(1, 13):
+        for i in range(1, self.num_step + 1):
             res[f'Step{i} min count'] = self.sys_cfg[i-1]['washcountmax']
             res[f'Step{i} min time'] = self.sys_cfg[i-1]['washtimemax']
-        res['Left Right Count Steps'] = [i for i in range(1, 13) if self.count_need_lr[i]]
-        res['Left Right Time Steps'] = [i for i in range(1, 13) if self.time_need_lr[i]]
+        res['Left Right Count Steps'] = [i for i in range(1, self.num_step + 1) if self.count_need_lr[i]]
+        res['Left Right Time Steps'] = [i for i in range(1, self.num_step + 1) if self.time_need_lr[i]]
         return res
 
     def _finalize_session(self, is_interrupted):
@@ -515,7 +517,7 @@ class HandWashTracker:
             # 有發送訊息
             if self.sent_msg is not None:
                 if cmd == 'status':
-                    if self.detecting_step == 12 and msg['trigger']:
+                    if self.detecting_step == self.num_step and msg['trigger']:
                         logger.info('handwashing completed, waiting for the UI to return to the homepage...')
                         self.cmd_queue.put(('completed', None))
 
@@ -528,7 +530,7 @@ class HandWashTracker:
             msgs = {"cmd": cmd, "side": self.zone_name.lower(), "time": str(self.login_gate.remain)}
         elif cmd == 'ResetCancel':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
-        elif cmd == 'BackLogin':  # 12 步驟 reset
+        elif cmd == 'BackLogin':  # 回到登入畫面
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
         elif cmd == 'AILogin':
             msgs = {"cmd": cmd, "side": self.zone_name.lower()}
@@ -568,7 +570,7 @@ class HandWashTracker:
         """
         # 收集所有「已確認但尚未寫入」的步驟
         pending = []
-        for step_id in range(1, 13):
+        for step_id in range(1, self.num_step + 1):
             if not self.step_confirmed[step_id]:
                 continue
             if self.start_times[step_id] is None:
