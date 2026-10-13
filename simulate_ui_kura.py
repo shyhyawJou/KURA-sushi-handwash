@@ -11,10 +11,11 @@ TOPIC_SEND = "handwash/system"
 TOPIC_CTRL = "handwash/system"   # 訂閱來自系統的控制指令（如 Reset）
 JSON_PATH  = "wash_steps.json"
 TIME_SCALE = 0.1666
+NUM_STEP = 8
 
 # 需求 1: 滿足 wash_steps.json 定義的步驟條件後, 延遲多久才發 NextStep
 NEXT_STEP_DELAY = 0.2
-# 需求 2: 收到 step12 trigger=True 後, 延遲多久才發 Logout
+# 需求 2: 收到最後 trigger=True 後, 延遲多久才發 Logout
 LOGOUT_DELAY = 0.5
 
 
@@ -197,7 +198,7 @@ def advance(client, side: str):
     label    = "reset → Step 1" if is_reset else f"→ Step {next_id}"
     logger.success(f"[{side}] Step {current_id:02d} satisfied, {label}")
 
-    if current_id == 12:
+    if current_id == NUM_STEP:
         cmd, delay = {"cmd": "Logout", "side": side}, LOGOUT_DELAY
     else:
         cmd, delay = {"cmd": "NextStep", "step_id": f"Step{next_id}", "side": side}, NEXT_STEP_DELAY

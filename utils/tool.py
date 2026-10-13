@@ -51,7 +51,7 @@ def get_boxes_outside(boxes: np.ndarray, roi: tuple) -> np.ndarray:
 def parse_lateral_flags(stages: list[dict]) -> tuple[dict, dict]:
     """
     回傳 (need_lateral_count, need_lateral_time)
-    兩個 list 的順序跟 stages 順序一致（即 step id 1~12）
+    兩個 list 的順序跟 stages 順序一致（即所有 step）
     """
     need_lateral_count = {}
     need_lateral_time = {}

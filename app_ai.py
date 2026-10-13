@@ -58,7 +58,7 @@ class App_HandWash:
         self.hand_trigger_logger = HandTriggerLogger(save_dir=CFG['csv_hand_trigger']['save_dir'])
 
         # 檢測洗手
-        self.screen = np.asarray(CFG['roi']['screen'])
+        self.screen = np.asarray(CFG['roi']['screen']) if CFG['roi']['screen'] is not None else None
         self.tracker_left = HandWashTracker("Left", CFG['logic'], SYS_CFG, self.ai_model.classes, 
                                             self.mqtt_manager, CFG['mqtt']['pub_freq'],
                                             hand_trigger_logger=self.hand_trigger_logger)
@@ -140,12 +140,13 @@ class App_HandWash:
                         scores, boxes, pred_labels = self.ai_model(frame)
 
                     # 螢幕內的框進行忽略
-                    h, w = frame.shape[:2]
-                    screen = self.screen * [w, h, w, h]
-                    is_outside = get_boxes_outside(boxes, screen)
-                    scores = scores[is_outside]
-                    boxes = boxes[is_outside]
-                    pred_labels = pred_labels[is_outside]
+                    if self.screen is not None:
+                        h, w = frame.shape[:2]
+                        screen = self.screen * [w, h, w, h]
+                        is_outside = get_boxes_outside(boxes, screen)
+                        scores = scores[is_outside]
+                        boxes = boxes[is_outside]
+                        pred_labels = pred_labels[is_outside]
 
                     # 把 detections 分至左右區
                     with split_timer:
@@ -200,8 +201,9 @@ class App_HandWash:
                     # visualization
                     with draw_result_timer:
                         # 畫螢幕
-                        screen = screen.astype(int)
-                        cv2.rectangle(frame_copy, screen[:2], screen[2:4], (0, 255, 0), 3)
+                        if self.screen is not None:
+                            screen = screen.astype(int)
+                            cv2.rectangle(frame_copy, screen[:2], screen[2:4], (0, 255, 0), 3)
 
                         # 畫 detections
                         plot_bbox(frame_copy, 
