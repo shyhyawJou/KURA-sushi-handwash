@@ -48,19 +48,6 @@ AI:
             - gloved hand
         
         agnostic_nms: # null 是 disable
-            #-
-            #    class:
-            #        - 'handwash'
-            #        - 'trigger soap dispenser'
-            #        #- 'palm to palm'
-            #        #- 'palm over back'
-            #        #- 'interlaced fingers'
-            #        #- 'thumb or wrist scrub'
-            #        #- 'scrub under nails'
-            #        #- 'wipe hands with tissue'
-            #        #- 'UV sterilization'
-            #        - 'spray alcohol'
-            #    iou_thresh: 0.01
             - 
                 class:
                     - 'left palm over back'
@@ -196,6 +183,8 @@ logic:
 
     # 洗手相關參數
     handwash_parameter:
+        num_step: 12
+    
         step_name:
             1: [handwash]
             2: [trigger soap dispenser]
