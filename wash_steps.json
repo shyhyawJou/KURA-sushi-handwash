@@ -1,5 +1,5 @@
 {
-    "total_stages": 12,
+    "total_stages": 8,
     "stages": [
         {
             "id": 1,
@@ -84,21 +84,7 @@
         },
         {
             "id": 7,
-            "title": "7. 爪の間をこする",
-            "desc": "ブラシで細部まで洗浄",
-            "img": "step07.png",
-            "items": [
-                "1.動作確認",
-                "2.左手時間",
-                "右手時間"
-            ],
-            "washcountmax": 0,
-            "washtimemax": 5,
-            "timeoutmax": 5
-        },
-        {
-            "id": 8,
-            "title": "8. 流水で泡を流す",
+            "title": "7. 流水で泡を流す",
             "desc": "残留物のないように",
             "img": "step08.png",
             "items": [
@@ -110,47 +96,10 @@
             "timeoutmax": 5
         },
         {
-            "id": 9,
-            "title": "9. ペーパータオルでふく",
+            "id": 8,
+            "title": "8. ペーパータオルでふく",
             "desc": "清潔なタオルで乾燥",
             "img": "step09.png",
-            "items": [
-                "1.動作確認"
-            ],
-            "washcountmax": 0,
-            "washtimemax": 0,
-            "timeoutmax": 5
-        },
-        {
-            "id": 10,
-            "title": "10. スーパーMで殺菌・乾燥",
-            "desc": "高出力殺菌ライト",
-            "img": "step10.png",
-            "items": [
-                "1.動作確認",
-                "2.実施時間"
-            ],
-            "washcountmax": 0,
-            "washtimemax": 20,
-            "timeoutmax": 5
-        },
-        {
-            "id": 11,
-            "title": "11. アルコールを噴きつける",
-            "desc": "手指全体に噴霧",
-            "img": "step11.png",
-            "items": [
-                "1.動作確認"
-            ],
-            "washcountmax": 0,
-            "washtimemax": 0,
-            "timeoutmax": 5
-        },
-        {
-            "id": 12,
-            "title": "12. アルコールをもみ込む",
-            "desc": "乾燥するまで継続",
-            "img": "step12.png",
             "items": [
                 "1.動作確認"
             ],

@@ -19,11 +19,13 @@ AI:
         #path: best_0.9100_0.8080_epoch_8_kura_handwash_v21.onnx
         #path: best_0.9080_0.8080_epoch_11_kura_handwash_v21.onnx
         #path: best_0.9160_0.8160_epoch_33_kura_handwash_v22.onnx
-        path: best_0.9190_0.8210_epoch_29_kura_handwash_v23.onnx
+        #path: best_0.9190_0.8210_epoch_29_kura_handwash_v23.onnx
+        path: best_0.9210_0.8250_epoch_1_kura_handwash_v26.onnx
         #score_threshs: [0.5, 0.9, 0.95, 0.5, 0.9, 0.7, 0.6, 0.75, 0.95, 0.95, 0.75, 0.8, 0.9, 0.5, 0.5, 0.5]
         #score_threshs: [0.7, 0.85, 0.95, 0.85, 0.95, 0.5, 0.85, 0.9, 0.4, 0.55, 0.7, 0.95, 0.1, 0.55, 0.6, 0.5]
         #score_threshs: [0.85, 0.95, 0.95, 0.35, 0.95, 0.8, 0.8, 0.85, 0.2, 0.6, 0.55, 0.8, 0.8, 0.65, 0.7, 0.75]
-        score_threshs: [0.9, 0.9, 0.9, 0.55, 0.9, 0.75, 0.5, 0.7, 0.65, 0.8, 0.7, 0.95, 0.15, 0.55, 0.6, 0.55]
+        #score_threshs: [0.9, 0.9, 0.9, 0.55, 0.9, 0.75, 0.5, 0.7, 0.65, 0.8, 0.7, 0.95, 0.15, 0.55, 0.6, 0.55]
+        score_threshs: [0.95, 0.75, 0.95, 0.9, 0.8, 0.75, 0.95, 0.9, 0.6, 0.3, 0.7, 0.8, 0.8, 0.55, 0.6, 0.15]
         iou_thresh: 0.01
         input_wh: [448, 448]
 
@@ -46,19 +48,6 @@ AI:
             - gloved hand
         
         agnostic_nms: # null 是 disable
-            #-
-            #    class:
-            #        - 'handwash'
-            #        - 'trigger soap dispenser'
-            #        #- 'palm to palm'
-            #        #- 'palm over back'
-            #        #- 'interlaced fingers'
-            #        #- 'thumb or wrist scrub'
-            #        #- 'scrub under nails'
-            #        #- 'wipe hands with tissue'
-            #        #- 'UV sterilization'
-            #        - 'spray alcohol'
-            #    iou_thresh: 0.01
             - 
                 class:
                     - 'left palm over back'
@@ -68,11 +57,6 @@ AI:
                 class:
                     - 'left thumb or wrist scrub'
                     - 'right thumb or wrist scrub'
-                iou_thresh: 0.01
-            - 
-                class:
-                    - 'left scrub under nails'
-                    - 'right scrub under nails'
                 iou_thresh: 0.01
 
 device: 
@@ -189,11 +173,13 @@ logic:
         hand:
             - 'left'
             - 'right'
-        gloved hand:
-            - 'gloved hand'
+        gloved hand: []
+            #- 'gloved hand'
 
     # 洗手相關參數
     handwash_parameter:
+        num_step: 8
+    
         step_name:
             1: [handwash]
             2: [trigger soap dispenser]
@@ -201,19 +187,15 @@ logic:
             4: [left palm over back, right palm over back]
             5: [interlaced fingers]
             6: [left thumb or wrist scrub, right thumb or wrist scrub]
-            7: [left scrub under nails, right scrub under nails]
-            8: [handwash]
-            9: [wipe hands with tissue]
-            10: [UV sterilization]
-            11: [spray alcohol]
-            12: null
+            7: [handwash]
+            8: [wipe hands with tissue]
 
         scrub_count_ratio:
             3: 7
             4: 7
             5: 7
             6: 7
-            
+
         scrub_overlap_thresh: 0.2     # Step 12 雙手重疊門檻
         action_frame:
             1: 10
@@ -224,10 +206,6 @@ logic:
             6: 10
             7: 10
             8: 10
-            9: 10
-            10: 10
-            11: 5
-            12: 10
         init_step_num: 1
         alarm_frame: 10  # 連續滿足才 alarm
 
@@ -241,9 +219,6 @@ logic:
             6: [6]
             7: [7]
             8: [8]
-            9: [9]
-            10: [10]
-            11: [11]
 
         valid_idle_frame: 5
     login:
@@ -276,4 +251,4 @@ mqtt:
     pub_freq: 25
 
 roi:
-    screen: [0.33240997, 0.08704062, 0.69637119, 0.3001354]
+    screen: null
