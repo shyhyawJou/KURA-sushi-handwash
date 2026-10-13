@@ -207,6 +207,7 @@ class HandWashTracker:
 
         # 檢測每個步驟
         self._check_step1_to_11(detections, hands)
+        self._check_step12(detections, hands)
 
         # 觸發登出
         if self.is_login:
@@ -257,9 +258,9 @@ class HandWashTracker:
         step_boxes = detections['box'][mask]
         step_labels = detections['label'][mask]
 
-        for i in range(1, self.num_step + 1):
+        for i in range(1, self.num_step):
             # step 1 和 8 只需要檢測其中一個
-            if i == (1 if self.detecting_step > 2 else 7):  # 做完肥皂後的洗手視為 step7
+            if i == (1 if self.detecting_step > 2 else 8):  # 做完肥皂後的洗手視為 step8
                 continue
 
             mask = np.isin(step_labels, self.step_labels[i])
@@ -275,6 +276,19 @@ class HandWashTracker:
             else:
                 self._undo_step(i)
 
+    def _check_step12(self, detections, hands):
+        # 忽略不是剛噴完酒精
+        if len(self.steps) == 0 or (self.steps[-1].id != 11 and self.detecting_step != 12):
+            return
+        
+        scrub_hand_mask = np.isin(detections['label'], self.label_scrub_hand)
+        
+        # 有做洗手動作
+        if len(hands) > 0 and np.any(scrub_hand_mask):
+            self._do_step(12)
+        elif self.detecting_step != 12:  # 如果正在檢測 step12, 允許累加
+            self._undo_step(12)
+        
     def _do_step(self, step_id):
         self._bucket(step_id, self.frames, self.left_frames, self.right_frames)[step_id] += 1
         self.end_times[step_id] = self.now

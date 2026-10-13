@@ -58,6 +58,11 @@ AI:
                     - 'left thumb or wrist scrub'
                     - 'right thumb or wrist scrub'
                 iou_thresh: 0.01
+            - 
+                class:
+                    - 'left scrub under nails'
+                    - 'right scrub under nails'
+                iou_thresh: 0.01
 
 device: 
     path: 'utils/device.yaml'
@@ -166,19 +171,19 @@ logic:
         pub_hand_delay: 0.5        # 連續幾秒手狀態切換後才開始通知系統
 
     # 前端和我共用的參數
-    system_parameter: '/mnt/reserved/QT_Stream/assets/Json/wash_steps.json'
+    system_parameter: '/mnt/reserved/QT/assets/Json/wash_steps.json'
 
     # 類別
     class:
         hand:
             - 'left'
             - 'right'
-        gloved hand: []
-            #- 'gloved hand'
+        gloved hand:
+            - 'gloved hand'
 
     # 洗手相關參數
     handwash_parameter:
-        num_step: 8
+        num_step: 12
     
         step_name:
             1: [handwash]
@@ -187,8 +192,12 @@ logic:
             4: [left palm over back, right palm over back]
             5: [interlaced fingers]
             6: [left thumb or wrist scrub, right thumb or wrist scrub]
-            7: [handwash]
-            8: [wipe hands with tissue]
+            7: [left scrub under nails, right scrub under nails]
+            8: [handwash]
+            9: [wipe hands with tissue]
+            10: [UV sterilization]
+            11: [spray alcohol]
+            12: null
 
         scrub_count_ratio:
             3: 7
@@ -206,6 +215,10 @@ logic:
             6: 10
             7: 10
             8: 10
+            9: 10
+            10: 10
+            11: 5
+            12: 10
         init_step_num: 1
         alarm_frame: 10  # 連續滿足才 alarm
 
@@ -219,6 +232,9 @@ logic:
             6: [6]
             7: [7]
             8: [8]
+            9: [9]
+            10: [10]
+            11: [11]
 
         valid_idle_frame: 5
     login:
@@ -251,4 +267,4 @@ mqtt:
     pub_freq: 5
 
 roi:
-    screen: null
+    screen: [0.33240997, 0.08704062, 0.69637119, 0.3001354]
