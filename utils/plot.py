@@ -1,5 +1,6 @@
 import cv2
 from .handwash import HandWashTracker
+from .cfg import CFG
 
 
 
@@ -196,7 +197,7 @@ def draw_debug_panel(img, tracker_l, tracker_r):
                               (start_x, h - panel_height + 15), status_color, font_size)
 
         # 步驟狀態
-        for i in range(1, 13):
+        for i in range(1, CFG['logic']['handwash_parameter']['num_step'] + 1):
             recorded = steps.get(i)
 
             if recorded is not None:

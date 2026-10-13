@@ -2,6 +2,7 @@ from collections.abc import MutableMapping
 from threading import Lock
 from dataclasses import dataclass
 from .tool import get_now_str
+from .cfg import CFG
 
 
 
@@ -59,7 +60,7 @@ class Step_History:
         self.left_frames = []
         self.right_frames = []
         self.is_detecting_steps = []
-        self.detected_steps = {i: None for i in range(1, 13)}
+        self.detected_steps = {i: None for i in range(1, CFG['logic']['handwash_parameter']['num_step'] + 1)}
 
     def __getitem__(self, idx):
         data = Step(self.ids[idx], self.frames[idx], self.left_frames[idx], self.right_frames[idx],
