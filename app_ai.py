@@ -17,7 +17,7 @@ import socket
 import subprocess
 from threading import Thread
 from utils import (Mjpeg_Streamer, 
-                   RTMDet_ONNX, 
+                   RTMDet_DLA, 
                    Camera,
                    Video,
                    setup_logger, MY_LOGGER,
@@ -48,7 +48,7 @@ class App_HandWash:
         CFG['csv']['output_path'] = VIDEO_FOLDER.with_name(f'{date}.csv')  # 利用檔名產生輸出檔案
 
         self.camera = Camera(**CFG['camera'])
-        self.ai_model = RTMDet_ONNX(**CFG['AI']['handwash'])
+        self.ai_model = RTMDet_DLA(**CFG['AI']['handwash'])
         self.streamer = Mjpeg_Streamer(**CFG['streamer'])
         self.origin_video = Video(**CFG['video']['origin'])
         self.result_video = Video(**CFG['video']['result'])
