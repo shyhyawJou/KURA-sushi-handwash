@@ -139,7 +139,7 @@ def draw_step_roi(img, tracker, color=(0, 255, 255), thickness=2, font_scale=0.3
     """ 只畫 tracker「login 中且 detecting step 有 ROI」(step 1、2) 的那個 ROI """
     if not tracker.is_login:
         return
-    res = tracker.get_detecting_roi(img.shape[:2])
+    res = tracker.get_detecting_roi()
     if res is None:
         return
     step_id, (x1, y1, x2, y2) = res

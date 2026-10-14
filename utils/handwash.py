@@ -2,7 +2,7 @@ import numpy as np
 from time import time
 from queue import Queue
 from loguru import logger
-from .tool import get_iou, get_now_str, get_utc_offset, parse_lateral_flags
+from .tool import get_iou, get_now_str, get_utc_offset, parse_lateral_flags, origin_rel_to_frame_px
 from .step import Step_History, MyDict
 from .clip import Clip
 from .cfg import CFG
@@ -57,7 +57,10 @@ class HandWashTracker:
         for i, box in self.step_roi.items():
             assert 1 <= i <= self.num_step and box.shape == (4,) and box[0] < box[2] and box[1] < box[3], \
                 f'[{zone_name}] invalid step roi {i}: {box}'
-        self._roi_px_cache = {}  # (h, w) -> {step_id: 像素座標 ROI}
+        # ROI 的座標系是「未裁切的原圖」, 要靠 set_frame_geometry 告知 原圖/裁切/frame 的關係才能換算成 frame 像素
+        self._geometry = None       # (origin_hw, crop_xyxy, frame_hw)
+        self._roi_px = {}           # {step_id: frame 像素座標 ROI}
+        self._warned_no_geometry = False
 
         # mqtt
         self.mqtt = mqtt
@@ -216,7 +219,7 @@ class HandWashTracker:
         #        return
 
         # 檢測每個步驟
-        self._check_step1_to_11(detections, hands, frame.shape[:2])
+        self._check_step1_to_11(detections, hands)
 
         # 觸發登出
         if self.is_login:
@@ -262,25 +265,44 @@ class HandWashTracker:
 
         return export_data
 
-    def get_step_roi_px(self, step_id, img_hw):
-        """ 回傳 step_id 的 ROI 像素座標 [x1, y1, x2, y2] (int), 沒有設定 ROI 的步驟回傳 None """
+    def set_frame_geometry(self, origin_hw, crop_xyxy, frame_hw):
+        """
+        每個 frame 呼叫一次, 告知 原圖大小 / 裁切範圍(原圖像素, None=沒裁切) / frame 大小。
+        參數沒變就不會重算; step ROI 設定的座標是未裁切原圖的相對比例, 這裡換算成 frame 像素。
+        """
+        key = (tuple(origin_hw), None if crop_xyxy is None else tuple(crop_xyxy), tuple(frame_hw))
+        if key == self._geometry:
+            return
+        self._geometry = key
+        self._roi_px = {i: origin_rel_to_frame_px(box, *key) for i, box in self.step_roi.items()}
+        logger.info(f'[{self.zone_name}] step ROI (frame px): '
+                    f'{ {i: b.tolist() for i, b in self._roi_px.items()} } '
+                    f'(origin_hw={key[0]}, crop={key[1]}, frame_hw={key[2]})')
+        for i, b in self._roi_px.items():
+            if b[2] - b[0] < 2 or b[3] - b[1] < 2:
+                logger.warning(f'[{self.zone_name}] step {i} ROI is outside the cropped area: {b.tolist()} !')
+
+    def get_step_roi_px(self, step_id):
+        """ 回傳 step_id 的 ROI frame 像素座標 [x1, y1, x2, y2] (int), 沒有設定 ROI 的步驟回傳 None """
         if step_id not in self.step_roi:
             return None
-        h, w = img_hw
-        if (h, w) not in self._roi_px_cache:
-            self._roi_px_cache[(h, w)] = {
-                i: (box * [w, h, w, h]).astype(int) for i, box in self.step_roi.items()
-            }
-        return self._roi_px_cache[(h, w)][step_id]
+        if self._geometry is None:
+            # 沒人設定過幾何資訊就無法換算座標, ROI 不觸發, 只警告一次
+            if not self._warned_no_geometry:
+                logger.warning(f'[{self.zone_name}] set_frame_geometry() was never called, '
+                               f'step ROI cannot be converted and will not trigger !')
+                self._warned_no_geometry = True
+            return None
+        return self._roi_px[step_id]
 
-    def get_detecting_roi(self, img_hw):
+    def get_detecting_roi(self):
         """ detecting step 有 ROI 的話回傳 (step_id, roi_px), 否則回傳 None (給繪圖用) """
-        roi = self.get_step_roi_px(self.detecting_step, img_hw)
+        roi = self.get_step_roi_px(self.detecting_step)
         return None if roi is None else (self.detecting_step, roi)
 
-    def _has_hand_in_roi(self, hands, step_id, img_hw):
+    def _has_hand_in_roi(self, hands, step_id):
         """ 是否有手 (hands 已是 bare/gloved hand 的框) 的中心點落在 step_id 的 ROI 內 (含邊界) """
-        roi = self.get_step_roi_px(step_id, img_hw)
+        roi = self.get_step_roi_px(step_id)
         if roi is None or len(hands) == 0:
             return False
         cx = (hands[:, 0] + hands[:, 2]) / 2.
@@ -288,7 +310,7 @@ class HandWashTracker:
         inside = (cx >= roi[0]) & (cx <= roi[2]) & (cy >= roi[1]) & (cy <= roi[3])
         return bool(inside.any())
 
-    def _check_step1_to_11(self, detections, hands, img_hw):
+    def _check_step1_to_11(self, detections, hands):
         mask = np.isin(detections['label'], self.step_labels_1d)
         step_boxes = detections['box'][mask]
         step_labels = detections['label'][mask]
@@ -308,7 +330,7 @@ class HandWashTracker:
             # step 1、2 (有設定 ROI 的步驟): 改成「有手在 ROI 內」觸發 (require_class 時還要同時有類別),
             # 之後的 action_frame 確認 / idle 容忍 / 步驟切換等防護跟其他步驟共用同一套 _do_step / _undo_step
             if i in self.step_roi:
-                is_trigger = self._has_hand_in_roi(hands, i, img_hw)
+                is_trigger = self._has_hand_in_roi(hands, i)
                 if is_trigger and self.roi_require_class:
                     is_trigger = bool(np.any(mask))
             else:

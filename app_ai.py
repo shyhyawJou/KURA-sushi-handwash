@@ -169,6 +169,11 @@ class App_HandWash:
 
                     # 洗手檢測
                     with handwash_timer:
+                        # step ROI 的座標是未裁切原圖的比例, 告知 tracker 原圖/裁切/frame 的關係
+                        geometry = (origin.shape[:2], self.camera.get_crop_region(origin.shape[:2]), frame.shape[:2])
+                        self.tracker_left.set_frame_geometry(*geometry)
+                        self.tracker_right.set_frame_geometry(*geometry)
+
                         res_l = self.tracker_left.update(
                             left_dets, 
                             frame_copy,

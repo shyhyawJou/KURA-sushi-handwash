@@ -1,6 +1,7 @@
 import numpy as np
 from datetime import datetime, timezone
 import json
+from .image import keep_scale_geometry
 
 
 
@@ -70,3 +71,33 @@ def parse_lateral_flags(stages: list[dict]) -> tuple[dict, dict]:
         need_lateral_time[stage['id']] = lateral_time
 
     return need_lateral_count, need_lateral_time
+
+
+def origin_rel_to_frame_px(box_rel, origin_hw, crop_xyxy, frame_hw):
+    """
+    把「未裁切原圖」的相對座標 [x1, y1, x2, y2] (0~1) 換算成「AI 吃的 frame」的像素座標。
+    換算流程跟 Camera 一致: 原圖 -> 裁切 (crop_xyxy, 原圖像素) -> resize_keep_scale(corner) -> frame
+
+    Args
+        origin_hw: 原圖 (h, w)
+        crop_xyxy: 原圖像素座標的裁切範圍; None 代表沒裁切
+        frame_hw: frame (h, w), 也就是 resize 的目標大小
+    Returns
+        np.ndarray (int) [x1, y1, x2, y2], 已 clip 在 frame 範圍內
+    """
+    oh, ow = origin_hw
+    fh, fw = frame_hw
+    cx1, cy1, cx2, cy2 = (0, 0, ow, oh) if crop_xyxy is None else [int(v) for v in crop_xyxy]
+    cw, ch = cx2 - cx1, cy2 - cy1
+
+    # 原圖像素 -> 裁切圖像素
+    box = np.asarray(box_rel, dtype='float64') * [ow, oh, ow, oh] - [cx1, cy1, cx1, cy1]
+
+    # 裁切圖 -> frame (等比縮放 + offset)
+    new_w, new_h, x_off, y_off = keep_scale_geometry((ch, cw), (fw, fh), 'corner')
+    box = box * [new_w / cw, new_h / ch, new_w / cw, new_h / ch] + [x_off, y_off, x_off, y_off]
+
+    box = np.round(box).astype(int)
+    box[[0, 2]] = np.clip(box[[0, 2]], 0, fw - 1)
+    box[[1, 3]] = np.clip(box[[1, 3]], 0, fh - 1)
+    return box

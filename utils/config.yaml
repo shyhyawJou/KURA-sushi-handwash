@@ -331,8 +331,8 @@ roi:
     screen: null
 
     # step 1、2 的觸發方式: 不再看模型類別, 改成「有手 (hand/gloved hand) 的框中心點落在該步驟 ROI 內」
-    # 座標格式跟 screen 一樣: [x1, y1, x2, y2], 為整張 frame 的相對比例 (0~1)
-    # !! 下面的數值只是預設佔位, 請依實際畫面校正 !!
+    # 座標格式: [x1, y1, x2, y2], 為「未裁切的原始相機畫面」(camera.wh) 的相對比例 (0~1)
+    # (跟 screen 不同, screen 是相對於裁切縮放後的 frame; 程式會自動依 camera.crop_area 換算)
     step_trigger:
         require_class: false  # true: 除了手在 ROI 內, 還要同時偵測到原本的類別 (step1: handwash, step2: trigger soap dispenser)
         left:

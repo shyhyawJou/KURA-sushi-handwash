@@ -145,6 +145,14 @@ class Camera:
             logger.success(f"Camera {self.device_path} and camera thread are released.")
             self.capture = None
 
+    def get_crop_region(self, origin_hw):
+        """ 回傳裁切範圍 (原圖像素 x1, y1, x2, y2); 沒設定 crop_area 則回傳 None (代表沒裁切) """
+        if len(self.crop_area) == 0:
+            return None
+        if self.crop_coords is not None:
+            return tuple(int(v) for v in self.crop_coords)
+        return tuple(int(v) for v in self._cal_crop_region(*origin_hw))
+
     def _cal_crop_region(self, img_h, img_w):
         crop_area = self.crop_area * [img_w, img_h, img_w, img_h]
         return crop_area.astype(int)

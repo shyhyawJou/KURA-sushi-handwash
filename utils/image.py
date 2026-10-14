@@ -3,28 +3,21 @@ import numpy as np
 
 
 
-def resize_keep_scale(img, size, mode='corner'):
+def keep_scale_geometry(src_hw, size, mode='corner'):
     """
-    Args
-        mode: "corner" | "center"
-    """
-    if img.shape[:2] == size[::-1]:
-        return img
+    resize_keep_scale 的幾何計算 (獨立出來, 讓其他地方可以做座標換算)
 
-    h, w = img.shape[:2]
+    Returns
+        (new_w, new_h, x_offset, y_offset): 縮放後影像的大小, 以及貼進畫布的位置
+    """
+    h, w = src_hw
     target_w, target_h = size
-    
+
     # 1. 計算縮放比例 (取寬高比最小的那個，確保不會超出邊界)
     scale = min(target_w / w, target_h / h)
     new_w, new_h = int(w * scale), int(h * scale)
-    
-    # 2. 縮放影像
-    resized_frame = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    
-    # 3. 建立黑色背景 (畫布)
-    canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-    
-    # 4. 計算置中位置
+
+    # 2. 計算置中位置
     if mode == 'center':
         x_offset = (target_w - new_w) // 2
         y_offset = (target_h - new_h) // 2
@@ -34,7 +27,25 @@ def resize_keep_scale(img, size, mode='corner'):
     else:
         raise ValueError(f'invaild resize mode: {mode}')
 
-    # 5. 將縮放後的影像放入畫布中央
+    return new_w, new_h, x_offset, y_offset
+
+
+def resize_keep_scale(img, size, mode='corner'):
+    """
+    Args
+        mode: "corner" | "center"
+    """
+    if img.shape[:2] == size[::-1]:
+        return img
+
+    target_w, target_h = size
+    new_w, new_h, x_offset, y_offset = keep_scale_geometry(img.shape[:2], size, mode)
+
+    # 縮放影像
+    resized_frame = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # 建立黑色背景 (畫布), 並將縮放後的影像放入
+    canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
     canvas[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized_frame
 
     return canvas
