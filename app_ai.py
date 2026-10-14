@@ -201,7 +201,7 @@ class App_HandWash:
 
                     # push to streamer
                     with streamer_timer:
-                        self.streamer.push_frame(frame_copy) 
+                        self.streamer.push_frame(frame) 
 
                     # write frame into video
                     with video_timer:

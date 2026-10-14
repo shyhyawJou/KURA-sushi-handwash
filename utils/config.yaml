@@ -1,6 +1,7 @@
 camera:
     #crop_area: [0., 0., 1., 0.677662037037037]  # 0.25, 0.25, 0.75, 0.75
-    crop_area: [0., 0., 1., 0.7277]  # 0.25, 0.25, 0.75, 0.75
+    #crop_area: [0., 0., 1., 0.7277]  # 0.25, 0.25, 0.75, 0.75
+    crop_area: [0.15078125, 0.37291667, 0.8578125, 0.81770833]  # demokit 0.15078125 0.37291667 0.8578125  0.81770833
     wh: [1280, 960]
     max_fake_frames: 300  # for 影片檔, 當連續讀不到一定數量的 frame 時才跳出影片
 
@@ -177,6 +178,18 @@ visualization:
             - UV sterilization
             - spray alcohol
             - gloved hand
+            - handwash
+            - trigger soap dispenser
+            ########################################
+            #- palm to palm
+            #- left palm over back
+            #- right palm over back
+            #- interlaced fingers
+            #- left thumb or wrist scrub
+            #- right thumb or wrist scrub
+            #- left scrub under nails
+            #- right scrub under nails
+            #- wipe hands with tissue
         bbox_thickness: 2
         plot_score: true
         font_scale: 0.35
