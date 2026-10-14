@@ -33,7 +33,7 @@ from utils import (Mjpeg_Streamer,
 
 VIDEO_PATH = None
 VIDEO_FOLDER = None
-ENABLE_SIMULATE_UI = True
+ENABLE_SIMULATE_UI = False
 
 
 class App_HandWash:
