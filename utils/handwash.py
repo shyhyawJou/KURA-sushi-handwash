@@ -49,6 +49,16 @@ class HandWashTracker:
         assert len(self.step_labels) == len(self.count_need_lr) == self.num_step, \
             f'{len(self.step_labels), len(self.count_need_lr)}'
 
+        # step 1、2 的 ROI 觸發設定 (相對比例 [x1, y1, x2, y2], 依區域 left/right 分開)
+        roi_cfg = CFG['roi'].get('step_trigger') or {}
+        self.roi_require_class = bool(roi_cfg.get('require_class', False))
+        self.step_roi = {int(i): np.asarray(box, dtype='float32')
+                         for i, box in (roi_cfg.get(zone_name.lower()) or {}).items()}
+        for i, box in self.step_roi.items():
+            assert 1 <= i <= self.num_step and box.shape == (4,) and box[0] < box[2] and box[1] < box[3], \
+                f'[{zone_name}] invalid step roi {i}: {box}'
+        self._roi_px_cache = {}  # (h, w) -> {step_id: 像素座標 ROI}
+
         # mqtt
         self.mqtt = mqtt
         self.pub_period = 1. / pub_freq
@@ -206,7 +216,7 @@ class HandWashTracker:
         #        return
 
         # 檢測每個步驟
-        self._check_step1_to_11(detections, hands)
+        self._check_step1_to_11(detections, hands, frame.shape[:2])
 
         # 觸發登出
         if self.is_login:
@@ -252,13 +262,39 @@ class HandWashTracker:
 
         return export_data
 
-    def _check_step1_to_11(self, detections, hands):
+    def get_step_roi_px(self, step_id, img_hw):
+        """ 回傳 step_id 的 ROI 像素座標 [x1, y1, x2, y2] (int), 沒有設定 ROI 的步驟回傳 None """
+        if step_id not in self.step_roi:
+            return None
+        h, w = img_hw
+        if (h, w) not in self._roi_px_cache:
+            self._roi_px_cache[(h, w)] = {
+                i: (box * [w, h, w, h]).astype(int) for i, box in self.step_roi.items()
+            }
+        return self._roi_px_cache[(h, w)][step_id]
+
+    def get_detecting_roi(self, img_hw):
+        """ detecting step 有 ROI 的話回傳 (step_id, roi_px), 否則回傳 None (給繪圖用) """
+        roi = self.get_step_roi_px(self.detecting_step, img_hw)
+        return None if roi is None else (self.detecting_step, roi)
+
+    def _has_hand_in_roi(self, hands, step_id, img_hw):
+        """ 是否有手 (hands 已是 bare/gloved hand 的框) 的中心點落在 step_id 的 ROI 內 (含邊界) """
+        roi = self.get_step_roi_px(step_id, img_hw)
+        if roi is None or len(hands) == 0:
+            return False
+        cx = (hands[:, 0] + hands[:, 2]) / 2.
+        cy = (hands[:, 1] + hands[:, 3]) / 2.
+        inside = (cx >= roi[0]) & (cx <= roi[2]) & (cy >= roi[1]) & (cy <= roi[3])
+        return bool(inside.any())
+
+    def _check_step1_to_11(self, detections, hands, img_hw):
         mask = np.isin(detections['label'], self.step_labels_1d)
         step_boxes = detections['box'][mask]
         step_labels = detections['label'][mask]
 
         for i in range(1, self.num_step + 1):
-            # step 1 和 8 只需要檢測其中一個
+            # step 1 和 7 只需要檢測其中一個
             if i == (1 if self.detecting_step > 2 else 7):  # 做完肥皂後的洗手視為 step7
                 continue
 
@@ -269,7 +305,16 @@ class HandWashTracker:
                 category = self.ai_classes[step_labels[mask][0]].split()[0]
                 self.categories[i] = category
 
-            if len(hands) > 0 and np.any(mask):
+            # step 1、2 (有設定 ROI 的步驟): 改成「有手在 ROI 內」觸發 (require_class 時還要同時有類別),
+            # 之後的 action_frame 確認 / idle 容忍 / 步驟切換等防護跟其他步驟共用同一套 _do_step / _undo_step
+            if i in self.step_roi:
+                is_trigger = self._has_hand_in_roi(hands, i, img_hw)
+                if is_trigger and self.roi_require_class:
+                    is_trigger = bool(np.any(mask))
+            else:
+                is_trigger = len(hands) > 0 and np.any(mask)
+
+            if is_trigger:
                 self._do_step(i)
                 self._do_scrub_count(i, self.categories[i])
             else:

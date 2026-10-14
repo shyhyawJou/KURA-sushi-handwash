@@ -195,6 +195,36 @@ visualization:
         font_scale: 0.35
         font_thickness: 1
         text_padding: 1
+
+        # 類別名稱對照表: 模型類別名稱 -> 畫面上顯示的名稱
+        # (沒列在這裡的類別維持原名; omit_classes 仍然用「模型類別名稱」判斷, 不受這張表影響)
+        display_names:
+            handwash: 'step1/7'          # step 1 和 step 7 共用同一個類別
+            trigger soap dispenser: 'step2'
+            palm to palm: 'step3'
+            left palm over back: 'step4 (left)'
+            right palm over back: 'step4 (right)'
+            interlaced fingers: 'step5'
+            left thumb or wrist scrub: 'step6 (left)'
+            right thumb or wrist scrub: 'step6 (right)'
+            wipe hands with tissue: 'step8'
+
+        # true: 洗手區域處於 login 時, 該區域只畫「屬於 detecting step」的框 (omit_classes 照常作用)
+        #       沒 login 的區域維持原本行為 (畫所有沒被 omit 的框)
+        only_detecting_step: true
+
+        # step 1、2 的 ROI (見下方 roi.step_trigger) 要不要畫出來; 只會畫 == detecting step 的那個, 且該區域必須是 login 中
+        plot_step_roi: true
+        roi_color: [0, 255, 255]   # BGR, 粗細/字型沿用上面的 bbox_thickness / font_*
+
+    # 左右洗手區域的分隔線 (x = frame 寬度的一半, 跟左右分區邏輯一致)
+    zone_divider:
+        enable: true
+        dashed: true         # false 改畫實線 (若覺得虛線耗時)
+        color: [0, 0, 255]  # BGR
+        thickness: 1
+        dash_length: 10      # 虛線每一段的長度 (pixel)
+        gap_length: 8        # 虛線段與段的間隔 (pixel)
     
     timestamp:
         font_scale: 0.55
@@ -299,3 +329,15 @@ mqtt:
 
 roi:
     screen: null
+
+    # step 1、2 的觸發方式: 不再看模型類別, 改成「有手 (hand/gloved hand) 的框中心點落在該步驟 ROI 內」
+    # 座標格式跟 screen 一樣: [x1, y1, x2, y2], 為整張 frame 的相對比例 (0~1)
+    # !! 下面的數值只是預設佔位, 請依實際畫面校正 !!
+    step_trigger:
+        require_class: false  # true: 除了手在 ROI 內, 還要同時偵測到原本的類別 (step1: handwash, step2: trigger soap dispenser)
+        left:
+            1: [0.290625,   0.58333333, 0.353125,   0.65520833]
+            2: [0.3890625,  0.546875,   0.4515625,  0.61875   ]
+        right:
+            1: [0.653125,   0.58854167, 0.715625,   0.66041667]
+            2: [0.57421875, 0.55,       0.63671875, 0.621875  ]

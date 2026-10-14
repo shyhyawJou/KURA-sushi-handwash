@@ -55,7 +55,13 @@ def plot_bbox(img,
               plot_score=True,
               font_scale=0.55,
               font_thickness=1,
-              text_padding=2):
+              text_padding=2,
+              display_names=None):
+    """
+    display_names: {模型類別名稱: 畫面顯示名稱}, 沒列到的類別維持原名。
+                   omit_classes 一律用「模型類別名稱」判斷, 不受 display_names 影響。
+    """
+    display_names = display_names or {}
     
     # bbox
     if boxes.ndim == 1:
@@ -84,7 +90,8 @@ def plot_bbox(img,
         # 畫 bbox
         cv2.rectangle(img, tuple(box[:2]), tuple(box[2:4]), get_color(pred_lb), bbox_thickness)
 
-        text = f'{cls} {score * 100:.1f}%' if plot_score else cls
+        name = display_names.get(cls, cls)
+        text = f'{name} {score * 100:.1f}%' if plot_score else name
         (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
         label_h = text_h + baseline + text_padding * 2
         label_w = text_w + text_padding * 2
@@ -113,6 +120,37 @@ def plot_bbox(img,
         cv2.rectangle(img, bg_top_left, bg_bottom_right, (0, 0, 0), -1)
         cv2.putText(img, text, (tx + text_padding, ty + text_h + text_padding),
                     font, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
+
+
+def draw_zone_divider(img, color=(255, 255, 255), thickness=1, dashed=True, dash_length=10, gap_length=8):
+    """ 在 frame 正中間 (x = w // 2, 跟左右分區一致) 畫鉛直分隔線, dashed=False 時畫實線 """
+    h, w = img.shape[:2]
+    x = w // 2
+    if not dashed:
+        cv2.line(img, (x, 0), (x, h - 1), color, thickness)
+        return
+
+    step = max(dash_length + gap_length, 1)
+    for y in range(0, h, step):
+        cv2.line(img, (x, y), (x, min(y + dash_length, h - 1)), color, thickness)
+
+
+def draw_step_roi(img, tracker, color=(0, 255, 255), thickness=2, font_scale=0.35, font_thickness=1):
+    """ 只畫 tracker「login 中且 detecting step 有 ROI」(step 1、2) 的那個 ROI """
+    if not tracker.is_login:
+        return
+    res = tracker.get_detecting_roi(img.shape[:2])
+    if res is None:
+        return
+    step_id, (x1, y1, x2, y2) = res
+    cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness)
+
+    text = f'step{step_id} ROI'
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    (tw, th), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
+    ty = max(int(y1) - 4, th + 2)
+    cv2.putText(img, text, (int(x1) + 2, ty), font, font_scale, (0, 0, 0), font_thickness + 2, cv2.LINE_AA)
+    cv2.putText(img, text, (int(x1) + 2, ty), font, font_scale, color, font_thickness, cv2.LINE_AA)
 
 
 def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offset=2):

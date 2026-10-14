@@ -25,6 +25,7 @@ from utils import (Mjpeg_Streamer,
                    HandWashTracker,
                    HandTriggerLogger,
                    draw_timestamp, draw_debug_panel, plot_bbox,
+                   draw_zone_divider, draw_step_roi,
                    Timer,
                    MQTT,
                    get_now_str, get_utc_offset, get_boxes_outside,
@@ -56,6 +57,15 @@ class App_HandWash:
         self.tracker_right = HandWashTracker("Right", CFG['logic'], SYS_CFG, self.ai_model.classes, 
                                              self.mqtt_manager, CFG['mqtt']['pub_freq'],
                                              hand_trigger_logger=self.hand_trigger_logger)
+
+        # 視覺化設定: bbox 區塊裡有幾個不是 plot_bbox 的參數, 先拆出來
+        vis_cfg = CFG['visualization']
+        self.bbox_cfg = dict(vis_cfg['bbox'])
+        self.only_detecting_step = self.bbox_cfg.pop('only_detecting_step', False)
+        self.plot_step_roi = self.bbox_cfg.pop('plot_step_roi', False)
+        self.roi_color = tuple(self.bbox_cfg.pop('roi_color', (0, 255, 255)))
+        self.divider_cfg = dict(vis_cfg.get('zone_divider') or {})
+        self.draw_divider = self.divider_cfg.pop('enable', False)
 
         # 重要標籤
         self.wash_labels = self.tracker_left.step_labels_1d
@@ -182,13 +192,30 @@ class App_HandWash:
                             screen = screen.astype(int)
                             cv2.rectangle(frame_copy, screen[:2], screen[2:4], (0, 255, 0), 3)
 
+                        # 畫左右區分隔線 (畫在 bbox 底下)
+                        if self.draw_divider:
+                            draw_zone_divider(frame_copy, **self.divider_cfg)
+
                         # 畫 detections
+                        if self.only_detecting_step:
+                            keep = self._keep_detecting_step(pred_labels, is_left)
+                            boxes_d, labels_d, scores_d = boxes[keep], pred_labels[keep], scores[keep]
+                        else:
+                            boxes_d, labels_d, scores_d = boxes, pred_labels, scores
                         plot_bbox(frame_copy, 
-                                  boxes,
-                                  pred_labels, 
-                                  scores, 
+                                  boxes_d,
+                                  labels_d, 
+                                  scores_d, 
                                   self.ai_model.classes, 
-                                  **CFG['visualization']['bbox'])
+                                  **self.bbox_cfg)
+
+                        # 畫 step 1、2 的 ROI (只畫 login 中且 == detecting step 的)
+                        if self.plot_step_roi:
+                            for tracker in (self.tracker_left, self.tracker_right):
+                                draw_step_roi(frame_copy, tracker, self.roi_color,
+                                              self.bbox_cfg['bbox_thickness'],
+                                              self.bbox_cfg['font_scale'],
+                                              self.bbox_cfg['font_thickness'])
                         
                         # 畫 debug
                         draw_debug_panel(frame_copy, self.tracker_left, self.tracker_right)
@@ -201,7 +228,7 @@ class App_HandWash:
 
                     # push to streamer
                     with streamer_timer:
-                        self.streamer.push_frame(frame) 
+                        self.streamer.push_frame(frame_copy) 
 
                     # write frame into video
                     with video_timer:
@@ -232,6 +259,19 @@ class App_HandWash:
 
             except:
                 logger.error(f"{traceback.format_exc()}")
+
+    def _keep_detecting_step(self, labels, is_left):
+        """
+        回傳 bool mask: login 中的區域只保留「屬於 detecting step」的框, 沒 login 的區域全部保留。
+        (omit_classes 之後由 plot_bbox 照常處理)
+        """
+        keep = np.ones(len(labels), dtype=bool)
+        for tracker, in_zone in ((self.tracker_left, is_left), (self.tracker_right, ~is_left)):
+            if not tracker.is_login:
+                continue
+            is_step = np.isin(labels, tracker.step_labels[tracker.detecting_step])
+            keep &= ~in_zone | is_step
+        return keep
 
     def handle_exit(self, signum, frame):
         if signum == signal.SIGTERM:
