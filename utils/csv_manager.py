@@ -3,6 +3,7 @@ import csv
 from datetime import datetime
 from pathlib import Path as p
 from loguru import logger
+from .cfg import CFG
 
 
 
@@ -37,7 +38,7 @@ class Csv_Manager:
             "Frame", "Left Frame", "Right Frame",
             "Step Length", "Login reason", "Finish reason", "Region", "UTC Offset",
         ]
-        for i in range(1, 13):
+        for i in range(1, CFG['logic']['handwash_parameter']['num_step'] + 1):
             self.headers.append(f'Step{i} min count')
             self.headers.append(f'Step{i} min time')
         self.headers.extend(["Left Right Count Steps", "Left Right Time Steps"])
