@@ -2,7 +2,7 @@ import numpy as np
 from time import time
 from queue import Queue
 from loguru import logger
-from .tool import get_iou, get_now_str, get_utc_offset, parse_lateral_flags, origin_rel_to_frame_px
+from .tool import get_iou, get_now_str, get_utc_offset, parse_lateral_flags, origin_rel_to_frame_px, get_iou_with_box
 from .step import Step_History, MyDict
 from .clip import Clip
 from .cfg import CFG
@@ -54,6 +54,16 @@ class HandWashTracker:
         self.roi_require_class = bool(roi_cfg.get('require_class', False))
         self.step_roi = {int(i): np.asarray(box, dtype='float32')
                          for i, box in (roi_cfg.get(zone_name.lower()) or {}).items()}
+        # 共用 ROI: {7: 1} 表示 step 7 使用 step 1 的 ROI (做完肥皂後的洗手)
+        for dst, src in (roi_cfg.get('share_roi') or {}).items():
+            dst, src = int(dst), int(src)
+            assert src in self.step_roi, f'[{zone_name}] share_roi {dst}<-{src}: step {src} has no roi'
+            self.step_roi.setdefault(dst, self.step_roi[src])
+        # 手跟 ROI 的比對方式: 'iou' (IoU >= iou_thresh) 或 'center' (手的框中心點落在 ROI 內)
+        match_cfg = roi_cfg.get('hand_match') or {}
+        self.roi_match_mode = match_cfg.get('mode', 'iou')
+        self.roi_iou_thresh = float(match_cfg.get('iou_thresh', 0.1))
+        assert self.roi_match_mode in ('iou', 'center'), f'invalid hand_match mode: {self.roi_match_mode}'
         for i, box in self.step_roi.items():
             assert 1 <= i <= self.num_step and box.shape == (4,) and box[0] < box[2] and box[1] < box[3], \
                 f'[{zone_name}] invalid step roi {i}: {box}'
@@ -96,6 +106,10 @@ class HandWashTracker:
         #self.multi_step_frame = 0
         self.sent_msg = None
         self.saved_steps = []
+
+        # step ROI 的即時狀態 (給繪圖用): 最近一幀是否觸發 / 手跟 ROI 的最大 IoU
+        self.roi_hit = {}
+        self.roi_iou = {}
 
         # 手計數狀態機:
         self.login_gate = HandPresenceGate(
@@ -219,7 +233,7 @@ class HandWashTracker:
         #        return
 
         # 檢測每個步驟
-        self._check_step1_to_11(detections, hands)
+        self._check_steps(detections, hands)
 
         # 觸發登出
         if self.is_login:
@@ -296,21 +310,35 @@ class HandWashTracker:
         return self._roi_px[step_id]
 
     def get_detecting_roi(self):
-        """ detecting step 有 ROI 的話回傳 (step_id, roi_px), 否則回傳 None (給繪圖用) """
+        """ detecting step 有 ROI 的話回傳 (step_id, roi_px, is_hit, iou), 否則回傳 None (給繪圖用) """
         roi = self.get_step_roi_px(self.detecting_step)
-        return None if roi is None else (self.detecting_step, roi)
+        if roi is None:
+            return None
+        step = self.detecting_step
+        return step, roi, self.roi_hit.get(step, False), self.roi_iou.get(step, 0.)
 
-    def _has_hand_in_roi(self, hands, step_id):
-        """ 是否有手 (hands 已是 bare/gloved hand 的框) 的中心點落在 step_id 的 ROI 內 (含邊界) """
+    def _hand_roi_match(self, hands, step_id):
+        """
+        手 (hands 已是 bare/gloved hand 的框) 是否「進入」step_id 的 ROI
+        Returns: (is_match, max_iou)
+            iou:    任一隻手跟 ROI 的 IoU >= iou_thresh (手靠近鏡頭、框變很大時 IoU 會變小, 不容易誤觸發)
+            center: 任一隻手的框中心點落在 ROI 內 (含邊界)
+        """
         roi = self.get_step_roi_px(step_id)
         if roi is None or len(hands) == 0:
-            return False
+            return False, 0.
+
+        ious = get_iou_with_box(hands, roi)
+        max_iou = float(ious.max())
+        if self.roi_match_mode == 'iou':
+            return max_iou >= self.roi_iou_thresh, max_iou
+
         cx = (hands[:, 0] + hands[:, 2]) / 2.
         cy = (hands[:, 1] + hands[:, 3]) / 2.
         inside = (cx >= roi[0]) & (cx <= roi[2]) & (cy >= roi[1]) & (cy <= roi[3])
-        return bool(inside.any())
+        return bool(inside.any()), max_iou
 
-    def _check_step1_to_11(self, detections, hands):
+    def _check_steps(self, detections, hands):
         mask = np.isin(detections['label'], self.step_labels_1d)
         step_boxes = detections['box'][mask]
         step_labels = detections['label'][mask]
@@ -318,6 +346,7 @@ class HandWashTracker:
         for i in range(1, self.num_step + 1):
             # step 1 和 7 只需要檢測其中一個
             if i == (1 if self.detecting_step > 2 else 7):  # 做完肥皂後的洗手視為 step7
+                self.roi_hit[i] = False
                 continue
 
             mask = np.isin(step_labels, self.step_labels[i])
@@ -327,12 +356,13 @@ class HandWashTracker:
                 category = self.ai_classes[step_labels[mask][0]].split()[0]
                 self.categories[i] = category
 
-            # step 1、2 (有設定 ROI 的步驟): 改成「有手在 ROI 內」觸發 (require_class 時還要同時有類別),
+            # step 1、2、7 (有設定 ROI 的步驟): 改成「有手進入 ROI」觸發 (require_class 時還要同時有類別),
             # 之後的 action_frame 確認 / idle 容忍 / 步驟切換等防護跟其他步驟共用同一套 _do_step / _undo_step
             if i in self.step_roi:
-                is_trigger = self._has_hand_in_roi(hands, i)
+                is_trigger, self.roi_iou[i] = self._hand_roi_match(hands, i)
                 if is_trigger and self.roi_require_class:
                     is_trigger = bool(np.any(mask))
+                self.roi_hit[i] = is_trigger
             else:
                 is_trigger = len(hands) > 0 and np.any(mask)
 

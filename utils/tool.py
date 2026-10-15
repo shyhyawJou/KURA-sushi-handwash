@@ -101,3 +101,18 @@ def origin_rel_to_frame_px(box_rel, origin_hw, crop_xyxy, frame_hw):
     box[[0, 2]] = np.clip(box[[0, 2]], 0, fw - 1)
     box[[1, 3]] = np.clip(box[[1, 3]], 0, fh - 1)
     return box
+
+
+def get_iou_with_box(boxes, box):
+    """
+    boxes (N, 4) 各自跟單一個 box (4,) 的 IoU, 回傳 (N,)
+    (寬、高分開 clip 成 >= 0 再相乘, 不重疊時一定是 0)
+    """
+    boxes = np.asarray(boxes, dtype='float64').reshape(-1, 4)
+    box = np.asarray(box, dtype='float64')
+    iw = np.clip(np.minimum(boxes[:, 2], box[2]) - np.maximum(boxes[:, 0], box[0]), 0, None)
+    ih = np.clip(np.minimum(boxes[:, 3], box[3]) - np.maximum(boxes[:, 1], box[1]), 0, None)
+    inter = iw * ih
+    area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    area_roi = (box[2] - box[0]) * (box[3] - box[1])
+    return inter / (area + area_roi - inter + 1e-16)

@@ -4,6 +4,8 @@ camera:
     crop_area: [0.15078125, 0.37291667, 0.8578125, 0.81770833]  # demokit 0.15078125 0.37291667 0.8578125  0.81770833
     wh: [1280, 960]
     max_fake_frames: 300  # for 影片檔, 當連續讀不到一定數量的 frame 時才跳出影片
+    
+camera_device_id: 137
 
 streamer:
     enable: true
@@ -192,7 +194,7 @@ visualization:
             #- wipe hands with tissue
         bbox_thickness: 2
         plot_score: true
-        font_scale: 0.35
+        font_scale: 1  # 0.35
         font_thickness: 1
         text_padding: 1
 
@@ -213,9 +215,10 @@ visualization:
         #       沒 login 的區域維持原本行為 (畫所有沒被 omit 的框)
         only_detecting_step: true
 
-        # step 1、2 的 ROI (見下方 roi.step_trigger) 要不要畫出來; 只會畫 == detecting step 的那個, 且該區域必須是 login 中
+        # step 1、2、7 的 ROI (見下方 roi.step_trigger) 要不要畫出來; 只會畫 == detecting step 的那個, 且該區域必須是 login 中
         plot_step_roi: true
-        roi_color: [0, 255, 255]   # BGR, 粗細/字型沿用上面的 bbox_thickness / font_*
+        roi_color: [0, 255, 255]   # BGR, 粗細/字型沿用上面的 bbox_thickness / font_*; plot_score 為 true 時 ROI 標籤會多顯示手跟 ROI 的 IoU
+        roi_fill_alpha: 0.25       # 手進入 ROI 時, 內部填同色半透明顏色的濃度 (0 = 不填, 外框顏色不變)
 
     # 左右洗手區域的分隔線 (x = frame 寬度的一半, 跟左右分區邏輯一致)
     zone_divider:
@@ -235,6 +238,9 @@ visualization:
         mode: 'center'
         stay_time: 2  # 秒
         num_block: 2
+
+    debug_panel:
+        enable: false
 
 logic:
     # 秒數相關
@@ -282,7 +288,7 @@ logic:
             5: 10
             6: 10
             7: 10
-            8: 10
+            8: 30
         init_step_num: 1
         alarm_frame: 10  # 連續滿足才 alarm
 
@@ -330,14 +336,19 @@ mqtt:
 roi:
     screen: null
 
-    # step 1、2 的觸發方式: 不再看模型類別, 改成「有手 (hand/gloved hand) 的框中心點落在該步驟 ROI 內」
+    # step 1、2、7 的觸發方式: 不再看模型類別, 改成「有手 (hand/gloved hand) 進入該步驟 ROI」
     # 座標格式: [x1, y1, x2, y2], 為「未裁切的原始相機畫面」(camera.wh) 的相對比例 (0~1)
     # (跟 screen 不同, screen 是相對於裁切縮放後的 frame; 程式會自動依 camera.crop_area 換算)
     step_trigger:
-        require_class: false  # true: 除了手在 ROI 內, 還要同時偵測到原本的類別 (step1: handwash, step2: trigger soap dispenser)
+        require_class: false  # true: 除了手進入 ROI, 還要同時偵測到原本的類別 (step1、7: handwash, step2: trigger soap dispenser)
+        share_roi:            # {步驟: 借用哪個步驟的 ROI}; 7: 1 表示 step 7 (做完肥皂後的洗手) 共用 step 1 的 ROI
+            7: 1
+        hand_match:
+            mode: iou         # iou: 手的框跟 ROI 的 IoU >= iou_thresh (手靠近鏡頭、框變大時不容易誤觸發); center: 手的框中心點在 ROI 內
+            iou_thresh: 0.25   # ROI 比手小很多時 IoU 上限很低 (ROI 面積 / 手面積), 請看畫面上 ROI 標籤顯示的 IoU 來校正
         left:
-            1: [0.290625,   0.58333333, 0.353125,   0.65520833]
-            2: [0.3890625,  0.546875,   0.4515625,  0.61875   ]
+            1: [0.290625,   0.58333333, 0.383125,   0.70520833]
+            2: [0.3890625,  0.546875,   0.4815625,  0.66875   ]
         right:
-            1: [0.653125,   0.58854167, 0.715625,   0.66041667]
-            2: [0.57421875, 0.55,       0.63671875, 0.621875  ]
+            1: [0.653125,   0.58854167, 0.745625,   0.71041667]
+            2: [0.57421875, 0.55,       0.66671875, 0.671875  ]

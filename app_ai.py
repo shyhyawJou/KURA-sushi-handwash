@@ -64,6 +64,7 @@ class App_HandWash:
         self.only_detecting_step = self.bbox_cfg.pop('only_detecting_step', False)
         self.plot_step_roi = self.bbox_cfg.pop('plot_step_roi', False)
         self.roi_color = tuple(self.bbox_cfg.pop('roi_color', (0, 255, 255)))
+        self.roi_fill_alpha = float(self.bbox_cfg.pop('roi_fill_alpha', 0.25))
         self.divider_cfg = dict(vis_cfg.get('zone_divider') or {})
         self.draw_divider = self.divider_cfg.pop('enable', False)
 
@@ -85,7 +86,11 @@ class App_HandWash:
             'Capture': self.capture_callback,            
         }
         self.mqtt_manager.add_callbacks(callbacks)
-        
+
+        # 相機參數
+        self.camera_device_path = f"/dev/video{CFG['camera_device_id']}"
+        #self.adjust_camera_param()
+
         signal.signal(signal.SIGINT, self.handle_exit)
         signal.signal(signal.SIGTERM, self.handle_exit)
         logger.success('all init succeeded !')
@@ -214,16 +219,19 @@ class App_HandWash:
                                   self.ai_model.classes, 
                                   **self.bbox_cfg)
 
-                        # 畫 step 1、2 的 ROI (只畫 login 中且 == detecting step 的)
+                        # 畫 step 1、2、7 的 ROI (只畫 login 中且 == detecting step 的)
                         if self.plot_step_roi:
                             for tracker in (self.tracker_left, self.tracker_right):
                                 draw_step_roi(frame_copy, tracker, self.roi_color,
                                               self.bbox_cfg['bbox_thickness'],
                                               self.bbox_cfg['font_scale'],
-                                              self.bbox_cfg['font_thickness'])
+                                              self.bbox_cfg['font_thickness'],
+                                              self.roi_fill_alpha,
+                                              self.bbox_cfg['plot_score'])
                         
                         # 畫 debug
-                        draw_debug_panel(frame_copy, self.tracker_left, self.tracker_right)
+                        if CFG['visualization']['debug_panel']['enable']:
+                            draw_debug_panel(frame_copy, self.tracker_left, self.tracker_right)
 
                         # 畫時間戳
                         now_str = get_now_str(now, utc=False)
@@ -322,6 +330,44 @@ class App_HandWash:
         cv2.imwrite(dst_origin, origin)
         cv2.imwrite(dst_frame, frame)
         logger.success(f'saved captures in the "{folder}"')
+
+    def adjust_camera_param(self):
+        self.AE_once()
+        sleep(0.5)
+        self.AWB_once()
+
+    def AE_once(self):
+        self._set_and_verify_ctrl('exposure_auto', 3)
+        sleep(1)
+        self._set_and_verify_ctrl('exposure_auto', 1)
+        logger.success('AE once (Done)!')
+
+    def AWB_once(self):
+        self._set_and_verify_ctrl('white_balance_temperature_auto', 1)
+        sleep(1)
+        self._set_and_verify_ctrl('white_balance_temperature_auto', 0)
+        logger.success('AWB once (Done)!')
+
+    def _set_and_verify_ctrl(self, name: str, value: int) -> None:
+        """設定 v4l2 控制項並讀回確認是否設定成功"""
+        set_result = subprocess.run(
+            f'v4l2-ctl -d {self.camera_device_path} -c {name}={value}',
+            shell=True, capture_output=True, text=True,
+        )
+        if set_result.returncode != 0:
+            logger.warning(f"設定 {name}={value} 失敗: {set_result.stderr.strip()}")
+            return
+
+        get_result = subprocess.run(
+            f'v4l2-ctl -d {self.camera_device_path} -C {name}',
+            shell=True, capture_output=True, text=True,
+        )
+        current = get_result.stdout.strip()  # e.g. "white_balance_temperature_auto: 0"
+        current = ' '.join(current.split()[:2])
+        if current.endswith(f': {value}'):
+            logger.success(f"{name} 設定成功 -> {current}")
+        else:
+            logger.warning(f"{name} 設定後數值不符，預期 {value}，實際讀到: {current}")
 
 
 
