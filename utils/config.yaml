@@ -218,7 +218,8 @@ visualization:
         # step 1、2、7 的 ROI (見下方 roi.step_trigger) 要不要畫出來; 只會畫 == detecting step 的那個, 且該區域必須是 login 中
         plot_step_roi: true
         roi_color: [0, 255, 255]   # BGR, 粗細/字型沿用上面的 bbox_thickness / font_*; plot_score 為 true 時 ROI 標籤會多顯示手跟 ROI 的 IoU
-        roi_fill_alpha: 0.25       # 手進入 ROI 時, 內部填同色半透明顏色的濃度 (0 = 不填, 外框顏色不變)
+        roi_hit_color: [0, 255, 0] # BGR, 手進入 ROI (觸發) 時, 外框 / 標籤 / 內部填色都改用這個顏色 (預設綠色)
+        roi_fill_alpha: 0.5       # 手進入 ROI 時, 內部填色的濃度 (0 = 不填, 只有外框變色)
 
     # 左右洗手區域的分隔線 (x = frame 寬度的一半, 跟左右分區邏輯一致)
     zone_divider:

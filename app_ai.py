@@ -65,6 +65,7 @@ class App_HandWash:
         self.plot_step_roi = self.bbox_cfg.pop('plot_step_roi', False)
         self.roi_color = tuple(self.bbox_cfg.pop('roi_color', (0, 255, 255)))
         self.roi_fill_alpha = float(self.bbox_cfg.pop('roi_fill_alpha', 0.25))
+        self.roi_hit_color = tuple(self.bbox_cfg.pop('roi_hit_color', (0, 255, 0)))
         self.divider_cfg = dict(vis_cfg.get('zone_divider') or {})
         self.draw_divider = self.divider_cfg.pop('enable', False)
 
@@ -227,7 +228,8 @@ class App_HandWash:
                                               self.bbox_cfg['font_scale'],
                                               self.bbox_cfg['font_thickness'],
                                               self.roi_fill_alpha,
-                                              self.bbox_cfg['plot_score'])
+                                              self.bbox_cfg['plot_score'],
+                                              self.roi_hit_color)
                         
                         # 畫 debug
                         if CFG['visualization']['debug_panel']['enable']:

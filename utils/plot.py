@@ -137,10 +137,11 @@ def draw_zone_divider(img, color=(255, 255, 255), thickness=1, dashed=True, dash
 
 
 def draw_step_roi(img, tracker, color=(0, 255, 255), thickness=2, font_scale=0.35, font_thickness=1,
-                  fill_alpha=0.25, plot_score=True):
+                  fill_alpha=0.25, plot_score=True, hit_color=(0, 255, 0)):
     """
     只畫 tracker「login 中且 detecting step 有 ROI」(step 1、2、7) 的那個 ROI。
-    手進入 ROI (觸發) 時, ROI 內部會用同色、透明度 fill_alpha 的顏色填滿 (外框顏色不變, 0 = 不填)。
+    手進入 ROI (觸發, is_hit) 時, 外框和標籤都改成 hit_color (預設綠色),
+    內部也用 hit_color 以透明度 fill_alpha 填滿 (0 = 不填)。
     plot_score=True 時標籤會多顯示手跟 ROI 的 IoU (方便調 iou_thresh)。
     """
     if not tracker.is_login:
@@ -150,16 +151,17 @@ def draw_step_roi(img, tracker, color=(0, 255, 255), thickness=2, font_scale=0.3
         return
     step_id, (x1, y1, x2, y2), is_hit, iou = res
     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    draw_color = hit_color if is_hit else color
 
-    # 半透明填色 (只混合 ROI 那一小塊, 先填色再畫外框, 外框顏色不受影響)
+    # 半透明填色 (只混合 ROI 那一小塊, 先填色再畫外框)
     if is_hit and fill_alpha > 0:
         region = img[y1:y2 + 1, x1:x2 + 1]
         if region.size > 0:
             overlay = np.empty_like(region)
-            overlay[:] = color
+            overlay[:] = draw_color
             cv2.addWeighted(region, 1. - fill_alpha, overlay, fill_alpha, 0, dst=region)
 
-    cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
+    cv2.rectangle(img, (x1, y1), (x2, y2), draw_color, thickness)
 
     text = f'step{step_id} ROI'
     if plot_score:
@@ -168,7 +170,7 @@ def draw_step_roi(img, tracker, color=(0, 255, 255), thickness=2, font_scale=0.3
     (tw, th), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
     ty = max(y1 - 4, th + 2)
     cv2.putText(img, text, (x1 + 2, ty), font, font_scale, (0, 0, 0), font_thickness + 2, cv2.LINE_AA)
-    cv2.putText(img, text, (x1 + 2, ty), font, font_scale, color, font_thickness, cv2.LINE_AA)
+    cv2.putText(img, text, (x1 + 2, ty), font, font_scale, draw_color, font_thickness, cv2.LINE_AA)
 
 
 def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offset=2):
