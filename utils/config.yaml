@@ -193,7 +193,7 @@ visualization:
             #- right scrub under nails
             #- wipe hands with tissue
         bbox_thickness: 2
-        plot_score: true
+        plot_score: false
         font_scale: 1  # 0.35
         font_thickness: 1
         text_padding: 1
@@ -347,8 +347,8 @@ roi:
             mode: iou         # iou: 手的框跟 ROI 的 IoU >= iou_thresh (手靠近鏡頭、框變大時不容易誤觸發); center: 手的框中心點在 ROI 內
             iou_thresh: 0.25   # ROI 比手小很多時 IoU 上限很低 (ROI 面積 / 手面積), 請看畫面上 ROI 標籤顯示的 IoU 來校正
         left:
-            1: [0.290625,   0.58333333, 0.383125,   0.70520833]
-            2: [0.3890625,  0.546875,   0.4815625,  0.66875   ]
+            1: [0.240625,   0.61333333, 0.333125,   0.73520833]
+            2: [0.3390625,  0.576875,   0.4315625,  0.69875   ]
         right:
             1: [0.653125,   0.58854167, 0.745625,   0.71041667]
             2: [0.57421875, 0.55,       0.66671875, 0.671875  ]
