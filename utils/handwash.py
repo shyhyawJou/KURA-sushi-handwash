@@ -410,12 +410,45 @@ class HandWashTracker:
         self._any_step_done_since_hand_trigger = True
         logger.info(f'[{self.zone_name}] Add Step {step_id} into step sequence !')
 
+    def _is_step_satisfied(self, step_id, count, left_count, right_count,
+                           duration, left_duration, right_duration):
+        """
+        這個步驟是否達到 wash_steps.json 設定的「洗手次數」和「時間」門檻。
+        step_confirmed 只代表有偵測到動作, 不代表次數/秒數已經達標。
+        判斷邏輯與 plot.py 的 is_done 相同: 需要分左右的, 左右手各自都要達標。
+        """
+        min_count = self.sys_cfg[step_id - 1]['washcountmax']
+        min_time = self.sys_cfg[step_id - 1]['washtimemax']
+
+        if self.time_need_lr[step_id]:
+            time_ok = left_duration >= min_time and right_duration >= min_time
+        else:
+            time_ok = duration >= min_time
+
+        if self.count_need_lr[step_id]:
+            count_ok = left_count >= min_count and right_count >= min_count
+        else:
+            count_ok = count >= min_count
+
+        return time_ok and count_ok
+
     def _get_final_data(self):
         if len(self.steps) == 0 and (self.login_mode == 'hand' or self.user_id is None):
             return {}
 
         # sort
         self.steps.sort_by_start_time()
+
+        # Finished Step
+        steps = self.steps
+        n_finished = sum(steps.is_detecting_steps)
+        for k in range(len(steps) - 1, -1, -1):
+            if steps.is_detecting_steps[k]:
+                if not self._is_step_satisfied(
+                        steps.ids[k], steps.counts[k], steps.left_counts[k], steps.right_counts[k],
+                        steps.durations[k], steps.left_durations[k], steps.right_durations[k]):
+                    n_finished -= 1
+                break
 
         res = {
             "Store ID": "test", 
@@ -424,7 +457,7 @@ class HandWashTracker:
             "UTC Offset": get_utc_offset(),
             "Login Mode": self.login_mode,
             "Step Sequence": self.steps.ids.copy(),
-            "Finished Step": sum(self.steps.is_detecting_steps),
+            "Finished Step": n_finished,
             "Login Time": self.login_time,
             "Start Time": [get_now_str(t) for t in self.steps.start_times], 
             "Action Confirmed Time": [get_now_str(t) for t in self.steps.step_confirmed_times], 
