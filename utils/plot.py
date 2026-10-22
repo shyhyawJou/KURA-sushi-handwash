@@ -173,6 +173,33 @@ def draw_step_roi(img, tracker, color=(0, 255, 255), thickness=2, font_scale=0.3
     cv2.putText(img, text, (x1 + 2, ty), font, font_scale, draw_color, font_thickness, cv2.LINE_AA)
 
 
+def draw_all_step_roi(img, trackers, steps=(1, 2), color=(0, 255, 255), thickness=2,
+                      font_scale=0.35, font_thickness=1):
+    """
+    debug 用: 不管 login / detecting step, 每個 frame 都把所有 tracker 的 step ROI 畫出來。
+    標籤為 "step{n} {left/right}" (step 1 在 ROI 下方, 其他步驟在上方)。
+    step 7 共用 step 1 的 ROI, 所以預設只畫 step 1、2。
+    """
+    h, w = img.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    for tracker in trackers:
+        zone = tracker.zone_name.lower()
+        for step_id in steps:
+            roi = tracker.get_step_roi_px(step_id)
+            if roi is None:
+                continue
+            x1, y1, x2, y2 = [int(v) for v in roi]
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
+
+            text = f'step{step_id} {zone}'
+            (tw, th), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
+            tx = min(x1 + 2, max(w - tw - 2, 0))
+            # step 1 的標籤放 ROI 下方, 其他步驟放上方, 避免相鄰/重疊的 ROI 標籤疊在一起
+            ty = min(y2 + th + 4, h - baseline - 1) if step_id == 1 else max(y1 - 4, th + 2)
+            cv2.putText(img, text, (tx, ty), font, font_scale, (0, 0, 0), font_thickness + 2, cv2.LINE_AA)
+            cv2.putText(img, text, (tx, ty), font, font_scale, color, font_thickness, cv2.LINE_AA)
+
+
 def draw_timestamp(img, timestamp_str, font_scale=0.8, thickness=2, shadow_offset=2):
     """
     在影像右下角繪製帶有陰影的紅色時間戳

@@ -1,5 +1,5 @@
 from .streamer import Mjpeg_Streamer
-from .plot import plot_bbox, draw_timestamp, draw_debug_panel, draw_zone_divider, draw_step_roi
+from .plot import plot_bbox, draw_timestamp, draw_debug_panel, draw_zone_divider, draw_step_roi, draw_all_step_roi
 from .detector import RTMDet_DLA, YOLOV9_ONNX
 from .camera import Camera
 from .video import Video

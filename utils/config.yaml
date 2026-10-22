@@ -4,6 +4,7 @@ camera:
     crop_area: [0.15078125, 0.37291667, 0.8578125, 0.81770833]  # demokit 0.15078125 0.37291667 0.8578125  0.81770833
     wh: [1280, 960]
     max_fake_frames: 300  # for 影片檔, 當連續讀不到一定數量的 frame 時才跳出影片
+    rotate180: true
     
 camera_device_id: 137
 
@@ -17,12 +18,12 @@ streamer:
 
 AI:
     handwash:
-        #path: best_0.9100_0.8080_epoch_8_kura_handwash_v21.onnx
-        #path: best_0.9080_0.8080_epoch_11_kura_handwash_v21.onnx
-        #path: best_0.9160_0.8160_epoch_33_kura_handwash_v22.onnx
-        #path: best_0.9190_0.8210_epoch_29_kura_handwash_v23.onnx
-        #path: best_0.9210_0.8250_epoch_1_kura_handwash_v26.onnx
-        path: best_0.9210_0.8200_epoch_16_kura_handwash_v29.onnx
+        #path: best_0.9100_0.8080_epoch_8_kura_handwash_v21_fp16.dla
+        #path: best_0.9080_0.8080_epoch_11_kura_handwash_v21_fp16.dla
+        #path: best_0.9160_0.8160_epoch_33_kura_handwash_v22_fp16.dla
+        #path: best_0.9190_0.8210_epoch_29_kura_handwash_v23_fp16.dla
+        #path: best_0.9210_0.8250_epoch_1_kura_handwash_v26_fp16.dla
+        path: best_0.9210_0.8200_epoch_16_kura_handwash_v29_fp16.dla
         #score_threshs: [0.5, 0.9, 0.95, 0.5, 0.9, 0.7, 0.6, 0.75, 0.95, 0.95, 0.75, 0.8, 0.9, 0.5, 0.5, 0.5]
         #score_threshs: [0.7, 0.85, 0.95, 0.85, 0.95, 0.5, 0.85, 0.9, 0.4, 0.55, 0.7, 0.95, 0.1, 0.55, 0.6, 0.5]
         #score_threshs: [0.85, 0.95, 0.95, 0.35, 0.95, 0.8, 0.8, 0.85, 0.2, 0.6, 0.55, 0.8, 0.8, 0.65, 0.7, 0.75]
@@ -194,7 +195,7 @@ visualization:
             #- left scrub under nails
             #- right scrub under nails
             #- wipe hands with tissue
-        bbox_thickness: 2
+        bbox_thickness: 5
         plot_score: false
         font_scale: 1  # 0.35
         font_thickness: 1
@@ -244,6 +245,7 @@ visualization:
 
     debug_panel:
         enable: false
+        plot_all_roi: false  # true: 每個 frame 都畫出 step 1、2 的 ROI (不管 login / detecting step), 標籤為 step{n} left/right, 用來校正 ROI 座標
 
 logic:
     # 秒數相關
@@ -349,9 +351,18 @@ roi:
         hand_match:
             mode: iou         # iou: 手的框跟 ROI 的 IoU >= iou_thresh (手靠近鏡頭、框變大時不容易誤觸發); center: 手的框中心點在 ROI 內
             iou_thresh: 0.25   # ROI 比手小很多時 IoU 上限很低 (ROI 面積 / 手面積), 請看畫面上 ROI 標籤顯示的 IoU 來校正
+        # 原始
+        #left:
+        #    1: [0.240625,   0.61333333, 0.333125,   0.73520833]
+        #    2: [0.3390625,  0.576875,   0.4315625,  0.69875   ]
+        #right:
+        #    1: [0.653125,   0.58854167, 0.745625,   0.71041667]
+        #    2: [0.57421875, 0.55,       0.66671875, 0.671875  ]
+        
+        # 旋轉 180 度 (SZM Fair)
         left:
-            1: [0.240625,   0.61333333, 0.333125,   0.73520833]
-            2: [0.3390625,  0.576875,   0.4315625,  0.69875   ]
+            1: [0.25828125, 0.45416667, 0.414375,   0.57291667]
+            2: [0.36609375, 0.45416667, 0.49875,    0.57291667]
         right:
-            1: [0.653125,   0.58854167, 0.745625,   0.71041667]
-            2: [0.57421875, 0.55,       0.66671875, 0.671875  ]
+            1: [0.623125,   0.45416667, 0.77921875, 0.57291667]
+            2: [0.55203125, 0.45416667, 0.68078125, 0.57291667]

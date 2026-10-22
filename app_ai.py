@@ -25,7 +25,7 @@ from utils import (Mjpeg_Streamer,
                    HandWashTracker,
                    HandTriggerLogger,
                    draw_timestamp, draw_debug_panel, plot_bbox,
-                   draw_zone_divider, draw_step_roi,
+                   draw_zone_divider, draw_step_roi, draw_all_step_roi,
                    Timer,
                    MQTT,
                    get_now_str, get_utc_offset, get_boxes_outside,
@@ -66,6 +66,7 @@ class App_HandWash:
         self.roi_color = tuple(self.bbox_cfg.pop('roi_color', (0, 255, 255)))
         self.roi_fill_alpha = float(self.bbox_cfg.pop('roi_fill_alpha', 0.25))
         self.roi_hit_color = tuple(self.bbox_cfg.pop('roi_hit_color', (0, 255, 0)))
+        self.debug_plot_all_roi = bool((vis_cfg.get('debug_panel') or {}).get('plot_all_roi', False))
         self.divider_cfg = dict(vis_cfg.get('zone_divider') or {})
         self.draw_divider = self.divider_cfg.pop('enable', False)
 
@@ -219,6 +220,14 @@ class App_HandWash:
                                   scores_d, 
                                   self.ai_model.classes, 
                                   **self.bbox_cfg)
+
+                        # debug: 每個 frame 都畫出 step 1、2 的 ROI (標註 step 和 left/right)
+                        if self.debug_plot_all_roi:
+                            draw_all_step_roi(frame_copy, (self.tracker_left, self.tracker_right),
+                                              (1, 2), self.roi_color,
+                                              self.bbox_cfg['bbox_thickness'],
+                                              self.bbox_cfg['font_scale'],
+                                              self.bbox_cfg['font_thickness'])
 
                         # 畫 step 1、2、7 的 ROI (只畫 login 中且 == detecting step 的)
                         if self.plot_step_roi:

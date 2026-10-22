@@ -11,7 +11,7 @@ from .image import resize_keep_scale
 
 
 class Camera:
-    def __init__(self, wh=(640, 480), crop_area=[], max_fake_frames=10):
+    def __init__(self, wh=(640, 480), crop_area=[], max_fake_frames=10, rotate180=False):
         """
         :param wh: Tuple (width, height)
         :param crop_area: Tuple (x1, y1, x2, y2) or None
@@ -26,6 +26,7 @@ class Camera:
         self.is_first_frame = True
         self.max_fake_frames = max_fake_frames
         self.n_fake_frame = 0
+        self.rotate180 = rotate180
         
         # Threading & Queue
         self.frame_queue = queue.Queue(maxsize=1)
@@ -100,6 +101,8 @@ class Camera:
             return False, (None, None)
         
         ret, origin = self.capture.read()
+        if self.rotate180:
+            origin = cv2.rotate(origin, cv2.ROTATE_180)
         if not ret:
             self.n_fake_frame += 1
             return False if self.n_fake_frame == self.max_fake_frames else None, (None, None)
