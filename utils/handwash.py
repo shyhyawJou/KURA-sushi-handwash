@@ -1,6 +1,6 @@
 import numpy as np
 from time import time
-from queue import Queue
+from queue import Queue, Empty
 from loguru import logger
 from .tool import get_iou, get_now_str, get_utc_offset, parse_lateral_flags
 from .step import Step_History, MyDict
@@ -124,7 +124,7 @@ class HandWashTracker:
         self.is_detecting_steps = new_dict(False)
         self.is_switch_step = False
         self.next_step = None
-        self.cmd_queue = Queue()
+        self._reset_cmd_queue()
 
         # debug info
         self._update_debug_info()
@@ -439,7 +439,9 @@ class HandWashTracker:
         # sort
         self.steps.sort_by_start_time()
 
-        # Finished Step
+        # Finished Step: 在 detecting 狀態下被記錄、而且有達標的步驟數
+        # UI 只有在達標時才會換下一步, 所以只有「最後一個 detecting step」可能只是 step_confirmed 還沒達標
+        # (stop() 會把「已確認但還沒寫入」的步驟也寫進 Step Sequence), 只需要檢查這一筆
         steps = self.steps
         n_finished = sum(steps.is_detecting_steps)
         for k in range(len(steps) - 1, -1, -1):
@@ -645,17 +647,11 @@ class HandWashTracker:
 
     def login_callback(self, cmd):
         """ QR code 登入 """
-        if self.is_login:
-            logger.warning('current status is login, so ignored the command of "login" !')
-        else:
-            self.cmd_queue.put(('login', cmd))
+        self.cmd_queue.put(('login', cmd))
 
     def button_login_callback(self, cmd):
         """ UI Button 登入 """
-        if self.is_login:
-            logger.warning('current status is login, so ignored the command of "UI button login" !')
-        else:
-            self.cmd_queue.put(('bn_login', cmd))
+        self.cmd_queue.put(('bn_login', cmd))
 
     def logout_callback(self, cmd):
         self.cmd_queue.put(('logout', cmd))
@@ -668,13 +664,48 @@ class HandWashTracker:
         self.is_paused = False
         self.finish_reason = reason
 
+    def _reset_cmd_queue(self):
+        """
+        session 結束 reset 時, 清掉舊 session 殘留的指令 (switch_step / completed ...),
+        但「還沒處理的登入指令」要保留下來:
+        UI 可能在 stop() 進行中就送來新的 Login, 如果連同整個 queue 一起換掉, 這個 Login 就遺失了
+        (AI 端是登出, UI 端卻以為已經登入)。
+        queue 物件本身不能換掉, 否則 MQTT 執行緒在換的瞬間 put 進去的指令也會遺失。
+        """
+        if not hasattr(self, 'cmd_queue'):
+            self.cmd_queue = Queue()
+            self._deferred_login = []  # 結束 session 的過程中收到、要等結束後才處理的登入指令
+            return
+        keep = []
+        while True:
+            try:
+                kind, cmd = self.cmd_queue.get_nowait()
+            except Empty:
+                break
+            if kind in ('login', 'bn_login'):
+                keep.append((kind, cmd))
+        for item in keep:
+            self.cmd_queue.put(item)
+
     def _drain_events(self):
+        # 上一幀正在結束 session 時收到的登入指令: 那一幀的 stop()/reset() 已經完成, 放回 queue 一起處理
+        while self._deferred_login:
+            self.cmd_queue.put(self._deferred_login.pop(0))
+
         while not self.cmd_queue.empty():
             kind, cmd = self.cmd_queue.get_nowait()
 
             if kind == 'switch_step':
                 self.is_switch_step = True
                 self.next_step = int(cmd['step_id'].replace('Step', ''))
+
+            elif kind in ('login', 'bn_login') and self.is_login and self.is_final:
+                logger.warning(f'[{self.zone_name}] The previous session is ending, '
+                               f'the command of "{kind}" will be handled after it is done !')
+                self._deferred_login.append((kind, cmd))
+
+            elif kind in ('login', 'bn_login') and self.is_login:
+                logger.warning(f'[{self.zone_name}] current status is login, so ignored the command of "{kind}" !')
 
             elif kind == 'login' and not self.is_login:
                 self.is_login = True
