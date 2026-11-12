@@ -439,7 +439,9 @@ class HandWashTracker:
         # sort
         self.steps.sort_by_start_time()
 
-        # Finished Step
+        # Finished Step: 在 detecting 狀態下被記錄、而且有達標的步驟數
+        # UI 只有在達標時才會換下一步, 所以只有「最後一個 detecting step」可能只是 step_confirmed 還沒達標
+        # (stop() 會把「已確認但還沒寫入」的步驟也寫進 Step Sequence), 只需要檢查這一筆
         steps = self.steps
         n_finished = sum(steps.is_detecting_steps)
         for k in range(len(steps) - 1, -1, -1):
