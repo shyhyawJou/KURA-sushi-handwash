@@ -286,13 +286,12 @@ class App_HandWash:
 
     def _keep_detecting_step(self, labels, is_left):
         """
-        回傳 bool mask: login 中的區域只保留「屬於 detecting step」的框, 沒 login 的區域全部保留。
+        回傳 bool mask: 左右兩個洗手區域都只保留「屬於各自 detecting step」的框,
+        不管有沒有 login (沒 login 時 detecting step 是初始步驟)。
         (omit_classes 之後由 plot_bbox 照常處理)
         """
         keep = np.ones(len(labels), dtype=bool)
         for tracker, in_zone in ((self.tracker_left, is_left), (self.tracker_right, ~is_left)):
-            if not tracker.is_login:
-                continue
             is_step = np.isin(labels, tracker.step_labels[tracker.detecting_step])
             keep &= ~in_zone | is_step
         return keep

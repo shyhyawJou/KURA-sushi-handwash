@@ -216,8 +216,7 @@ visualization:
             right thumb or wrist scrub: 'step6 (right)'
             wipe hands with tissue: 'step8'
 
-        # true: 洗手區域處於 login 時, 該區域只畫「屬於 detecting step」的框 (omit_classes 照常作用)
-        #       沒 login 的區域維持原本行為 (畫所有沒被 omit 的框)
+        # true: 左右洗手區域都只畫「屬於各自 detecting step」的框 (不管有沒有 login, 沒 login 時 detecting step 是初始步驟), omit_classes 照常作用
         only_detecting_step: true
 
         # step 1、2、7 的 ROI (見下方 roi.step_trigger) 要不要畫出來; 只會畫 == detecting step 的那個, 且該區域必須是 login 中
