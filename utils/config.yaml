@@ -247,7 +247,7 @@ visualization:
 
     debug_panel:
         enable: false
-        plot_all_roi: true  # true: 每個 frame 都畫出 step 1、2 的 ROI (不管 login / detecting step), 標籤為 step{n} left/right, 用來校正 ROI 座標
+        plot_all_roi: false  # true: 每個 frame 都畫出 step 1、2 的 ROI (不管 login / detecting step), 標籤為 step{n} left/right, 用來校正 ROI 座標
 
 logic:
     # 秒數相關
